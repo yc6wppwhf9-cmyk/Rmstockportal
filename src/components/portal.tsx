@@ -73,6 +73,8 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const [toast, setToast] = useState<string | null>(null);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chipRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
   /* Theme */
   useEffect(() => {
@@ -101,6 +103,34 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
     setActiveDept(dept);
     setActiveTab(thailysFor(dept)[0] ?? "");
     setQuery("");
+  };
+
+  const stepDept = (dir: 1 | -1) => {
+    const i = departments.indexOf(activeDept);
+    const j = i + dir;
+    if (j >= 0 && j < departments.length) pickDept(departments[j]);
+  };
+
+  // Keep the active department chip centred as it changes.
+  useEffect(() => {
+    chipRefs.current[activeDept]?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [activeDept]);
+
+  // Swipe left/right on the catalogue to switch department.
+  const onSwipeStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    swipeStart.current = { x: t.clientX, y: t.clientY };
+  };
+  const onSwipeEnd = (e: React.TouchEvent) => {
+    const s = swipeStart.current;
+    swipeStart.current = null;
+    if (!s || departments.length < 2) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      stepDept(dx < 0 ? 1 : -1);
+    }
   };
 
   /* Counts */
@@ -249,6 +279,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
           const c = deptStats[d] ?? { done: 0, total: 0 };
           return (
             <button key={d} className="dept-chip" role="tab" aria-selected={d === activeDept}
+              ref={(el) => { chipRefs.current[d] = el; }}
               onClick={() => pickDept(d)}>
               <Layers /> {d} <span className="c">{c.done}/{c.total}</span>
             </button>
@@ -292,7 +323,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
         Showing <b>{shown.length}</b> of <b>{totalInTab}</b> in {groupLabel(activeDept, activeTab)}
       </div>
 
-      <main>
+      <main onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd}>
         <div className="grid">
           {shown.length === 0 ? (
             <div className="empty-grid">No designs match your search or filter.</div>
