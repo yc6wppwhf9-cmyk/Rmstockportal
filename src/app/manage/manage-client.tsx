@@ -2,7 +2,31 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { unlock, importWorkbook, addItem, type UnlockState, type ImportState, type AddState } from "./actions";
+import { unlock, importWorkbook, addItem, type UnlockState, type ImportState } from "./actions";
+import { uploadPhoto } from "@/app/actions";
+import { CameraModal } from "@/components/camera";
+
+/** Downscale an image before upload (bounds size for camera and gallery). */
+function downscale(file: Blob, maxDim = 1100, quality = 0.75): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width: w, height: h } = img;
+      if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
+      else if (h >= w && h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext("2d");
+      if (!ctx) return reject(new Error("no canvas"));
+      ctx.drawImage(img, 0, 0, w, h);
+      cv.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("decode")); };
+    img.src = url;
+  });
+}
 
 const NEW = "__new__";
 
@@ -140,57 +164,129 @@ function ImportPanel({ departments }: { departments: string[] }) {
 function AddItemPanel({ departments }: { departments: string[] }) {
   const router = useRouter();
   const [dept, setDept] = useState<string>(departments[0] ?? "");
-  const [state, action, pending] = useActionState<AddState, FormData>(addItem, { ok: false });
+  const [photo, setPhoto] = useState<{ blob: Blob; url: string } | null>(null);
+  const [cam, setCam] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  useEffect(() => {
-    if (state.ok) { router.refresh(); formRef.current?.reset(); }
-  }, [state.ok, router]);
 
   const on = Boolean(dept); // fields enable once a department is chosen
 
+  const onCaptured = async (raw: Blob) => {
+    setCam(false);
+    try {
+      const blob = await downscale(raw);
+      setPhoto((p) => { if (p) URL.revokeObjectURL(p.url); return { blob, url: URL.createObjectURL(blob) }; });
+    } catch { setMsg({ ok: false, text: "Couldn’t process that image." }); }
+  };
+  const clearPhoto = () => setPhoto((p) => { if (p) URL.revokeObjectURL(p.url); return null; });
+
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!on) return;
+    const form = formRef.current!;
+    const fd = new FormData(form);
+    setPending(true); setMsg(null);
+    try {
+      const res = await addItem(fd);
+      if (!res.ok) { setMsg({ ok: false, text: res.error ?? "Couldn’t add the item." }); setPending(false); return; }
+
+      if (photo) {
+        const sr = String(fd.get("sr") ?? "").trim();
+        const thaily = String(fd.get("thaily") ?? "").trim() || "All";
+        const pf = new FormData();
+        pf.append("department", dept);
+        pf.append("thaily", thaily);
+        pf.append("sr", sr);
+        pf.append("photo", new File([photo.blob], "photo.jpg", { type: "image/jpeg" }));
+        const up = await uploadPhoto(pf);
+        setMsg(up.ok
+          ? { ok: true, text: "Item and photo added." }
+          : { ok: true, text: `Item added, but the photo didn’t upload: ${up.error}` });
+      } else {
+        setMsg({ ok: true, text: "Item added." });
+      }
+      form.reset();
+      clearPhoto();
+      router.refresh();
+    } catch {
+      setMsg({ ok: false, text: "Something went wrong. Try again." });
+    } finally {
+      setPending(false);
+    }
+  };
+
   return (
-    <form ref={formRef} action={action} className="panel">
-      <h2>Add a single item</h2>
-      <p className="sub">Pick a department first — the fields enable once it’s set.</p>
+    <>
+      <form ref={formRef} onSubmit={onSubmit} className="panel">
+        <h2>Add a single item</h2>
+        <p className="sub">Pick a department first — the fields enable once it’s set.</p>
 
-      <div className="form-grid">
-        <DepartmentField departments={departments} value={dept} onChange={setDept} id="add-dept" />
-        <input type="hidden" name="department" value={dept} />
+        <div className="form-grid">
+          <DepartmentField departments={departments} value={dept} onChange={setDept} id="add-dept" />
+          <input type="hidden" name="department" value={dept} />
 
-        <div className="fld"><label>Group / Thaily</label>
-          <input name="thaily" placeholder="e.g. 1 or All" defaultValue="All" disabled={!on} /></div>
-        <div className="fld"><label>Serial no *</label>
-          <input name="sr" type="number" min={0} placeholder="e.g. 12" disabled={!on} /></div>
+          <div className="fld"><label>Group / Thaily</label>
+            <input name="thaily" placeholder="e.g. 1 or All" defaultValue="All" disabled={!on} /></div>
+          <div className="fld"><label>Serial no *</label>
+            <input name="sr" type="number" min={0} placeholder="e.g. 12" disabled={!on} /></div>
 
-        <div className="fld full"><label>Item name</label>
-          <input name="name" placeholder="e.g. SL 8 SATIN RVS" disabled={!on} /></div>
+          <div className="fld full"><label>Item name</label>
+            <input name="name" placeholder="e.g. SL 8 SATIN RVS" disabled={!on} /></div>
 
-        <div className="fld"><label>Colour code</label>
-          <input name="colour" placeholder="e.g. NBL" disabled={!on} /></div>
-        <div className="fld"><label>Colour name</label>
-          <input name="colour_name" placeholder="e.g. Navy Blue" disabled={!on} /></div>
+          <div className="fld"><label>Colour code</label>
+            <input name="colour" placeholder="e.g. NBL" disabled={!on} /></div>
+          <div className="fld"><label>Colour name</label>
+            <input name="colour_name" placeholder="e.g. Navy Blue" disabled={!on} /></div>
 
-        <div className="fld"><label>Size</label>
-          <input name="size" placeholder="e.g. 15*12" disabled={!on} /></div>
-        <div className="fld"><label>Design / character</label>
-          <input name="character" placeholder="e.g. AVENGERS" disabled={!on} /></div>
+          <div className="fld"><label>Size</label>
+            <input name="size" placeholder="e.g. 15*12" disabled={!on} /></div>
+          <div className="fld"><label>Design / character</label>
+            <input name="character" placeholder="e.g. AVENGERS" disabled={!on} /></div>
 
-        <div className="fld"><label>Stock / inventory</label>
-          <input name="inventory" type="text" inputMode="numeric" placeholder="e.g. 22000" disabled={!on} /></div>
-        <div className="fld"><label>UOM</label>
-          <input name="uom" placeholder="Pcs / Mtr" disabled={!on} /></div>
+          <div className="fld"><label>Stock / inventory</label>
+            <input name="inventory" type="text" inputMode="numeric" placeholder="e.g. 22000" disabled={!on} /></div>
+          <div className="fld"><label>UOM</label>
+            <input name="uom" placeholder="Pcs / Mtr" disabled={!on} /></div>
 
-        <div className="fld full"><label>INV code</label>
-          <input name="inv" placeholder="e.g. INV22369" disabled={!on} /></div>
-      </div>
+          <div className="fld full"><label>INV code</label>
+            <input name="inv" placeholder="e.g. INV22369" disabled={!on} /></div>
 
-      {state.error && <div className="msg err">{state.error}</div>}
-      {state.ok && <div className="msg ok">Item added.</div>}
+          <div className="fld full">
+            <label>Photo</label>
+            <div className="add-photo">
+              {photo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photo.url} alt="Item preview" />
+              ) : (
+                <span>No photo yet — take a live photo or upload one.</span>
+              )}
+              <div className="add-photo-btns">
+                <button type="button" className="btn" disabled={!on} onClick={() => setCam(true)}>
+                  {photo ? "Retake / change" : "Take or upload"}
+                </button>
+                {photo && <button type="button" className="btn danger" onClick={clearPhoto}>Remove</button>}
+              </div>
+            </div>
+          </div>
+        </div>
 
-      <button className="btn primary block" type="submit" disabled={!on || pending}>
-        {pending ? "Saving…" : "Add item"}
-      </button>
-      {!on && <p className="hint-note">Select or name a department to enable the fields.</p>}
-    </form>
+        {msg && <div className={`msg ${msg.ok ? "ok" : "err"}`}>{msg.text}</div>}
+
+        <button className="btn primary block" type="submit" disabled={!on || pending}>
+          {pending ? "Saving…" : "Add item"}
+        </button>
+        {!on && <p className="hint-note">Select or name a department to enable the fields.</p>}
+      </form>
+
+      {cam && (
+        <CameraModal
+          title={dept || "New item"}
+          subtitle="New item photo"
+          onCapture={onCaptured}
+          onClose={() => setCam(false)}
+        />
+      )}
+    </>
   );
 }

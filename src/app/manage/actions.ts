@@ -62,7 +62,7 @@ export async function importWorkbook(_prev: ImportState, formData: FormData): Pr
 
 export type AddState = { ok: boolean; error?: string };
 
-export async function addItem(_prev: AddState, formData: FormData): Promise<AddState> {
+export async function addItem(formData: FormData): Promise<AddState> {
   if (!(await isUnlocked())) return { ok: false, error: "Enter the passcode first." };
 
   const g = (k: string) => String(formData.get(k) ?? "").trim();
