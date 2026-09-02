@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { unlock, importWorkbook, addItem, type UnlockState, type ImportState } from "./actions";
 import { uploadPhoto } from "@/app/actions";
 import { CameraModal } from "@/components/camera";
+import { computePcs, isMeter, sizeProduct } from "@/lib/pcs";
 
 /** Downscale an image before upload (bounds size for camera and gallery). */
 function downscale(file: Blob, maxDim = 1100, quality = 0.75): Promise<Blob> {
@@ -190,7 +191,14 @@ function AddItemPanel({ departments }: { departments: string[] }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
+  // Controlled so the pieces formula can preview live.
+  const [size, setSize] = useState("");
+  const [uom, setUom] = useState("");
+  const [inv, setInv] = useState("");
+
   const on = Boolean(dept); // fields enable once a department is chosen
+  const meter = isMeter(uom);
+  const pcsPreview = meter ? computePcs(uom, inv ? Number(inv.replace(/,/g, "")) : null, size) : null;
 
   const onCaptured = async (raw: Blob) => {
     setCam(false);
@@ -227,6 +235,7 @@ function AddItemPanel({ departments }: { departments: string[] }) {
         setMsg({ ok: true, text: "Item added." });
       }
       form.reset();
+      setSize(""); setUom(""); setInv("");
       clearPhoto();
       router.refresh();
     } catch {
@@ -260,14 +269,24 @@ function AddItemPanel({ departments }: { departments: string[] }) {
             <input name="colour_name" placeholder="e.g. Navy Blue" disabled={!on} /></div>
 
           <div className="fld"><label>Size</label>
-            <input name="size" placeholder="e.g. 15*12" disabled={!on} /></div>
+            <input name="size" placeholder="e.g. 15*12" disabled={!on} value={size} onChange={(e) => setSize(e.target.value)} /></div>
           <div className="fld"><label>Design / character</label>
             <input name="character" placeholder="e.g. AVENGERS" disabled={!on} /></div>
 
           <div className="fld"><label>Stock / inventory</label>
-            <input name="inventory" type="text" inputMode="numeric" placeholder="e.g. 22000" disabled={!on} /></div>
+            <input name="inventory" type="text" inputMode="numeric" placeholder="e.g. 22000" disabled={!on} value={inv} onChange={(e) => setInv(e.target.value)} /></div>
           <div className="fld"><label>UOM</label>
-            <input name="uom" placeholder="Pcs / Mtr" disabled={!on} /></div>
+            <input name="uom" placeholder="Pcs / Mtr" disabled={!on} value={uom} onChange={(e) => setUom(e.target.value)} /></div>
+
+          {meter && (
+            <div className="fld full">
+              <div className="pcs-preview">
+                {pcsPreview != null
+                  ? <>≈ <b>{pcsPreview.toLocaleString()} Pcs</b> &nbsp;·&nbsp; {inv || "metres"} × 2145 ÷ {sizeProduct(size) ?? "size"}</>
+                  : "Enter size and metres to convert to pieces (metres × 2145 ÷ size)."}
+              </div>
+            </div>
+          )}
 
           <div className="fld full"><label>INV code</label>
             <input name="inv" placeholder="e.g. INV22369" disabled={!on} /></div>
