@@ -1,13 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { RmItemView } from "@/lib/types";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { RmItem, RmItemView } from "@/lib/types";
 import { uploadPhoto, removePhoto } from "@/app/actions";
 import { CameraModal } from "./camera";
 
 const keyOf = (d: string, t: string, s: number) => `${d}::${t}::${s}`;
 const groupLabel = (dept: string, t: string) =>
   dept === "Digital Print" ? `Thaily ${t}` : t;
+
+const SELECT =
+  "id, department, thaily, sr, size, colour, character, name, inventory, uom, photo_path, photo_updated_at, extra";
+
+/** Client-safe Cloudinary URL (reads only the public cloud name). */
+const CLOUD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+function cloudUrl(publicId: string | null | undefined): string | null {
+  if (!publicId || !CLOUD) return null;
+  const enc = publicId.split("/").map(encodeURIComponent).join("/");
+  return `https://res.cloudinary.com/${CLOUD}/image/upload/f_auto,q_auto/${enc}`;
+}
+const toView = (row: RmItem): RmItemView => ({ ...row, photoUrl: cloudUrl(row.photo_path) });
 
 /* ── Icons ─────────────────────────────────────────── */
 const Cam = ({ w = 24 }: { w?: number }) => (
@@ -75,6 +88,49 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chipRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const sbRef = useRef<SupabaseClient | null>(null);
+
+  /* Live updates: keep the gallery current across devices without a manual
+     refresh. Realtime pushes changes instantly (when enabled on the table);
+     a gentle poll and a refetch-on-focus cover the case where it isn't. */
+  const refetch = useCallback(async () => {
+    const sb = sbRef.current;
+    if (!sb) return;
+    const { data } = await sb
+      .from("rm_item")
+      .select(SELECT)
+      .order("department", { ascending: true })
+      .order("thaily", { ascending: true })
+      .order("sr", { ascending: true })
+      .limit(5000);
+    if (data) setItems((data as RmItem[]).map(toView));
+  }, []);
+
+  useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+    const sb = createClient(url, key, { auth: { persistSession: false } });
+    sbRef.current = sb;
+
+    const channel = sb
+      .channel("rm_item-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "rm_item" }, () => refetch())
+      .subscribe();
+
+    const onVisible = () => { if (document.visibilityState === "visible") refetch(); };
+    document.addEventListener("visibilitychange", onVisible);
+    const poll = setInterval(() => {
+      if (document.visibilityState === "visible") refetch();
+    }, 15000);
+
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+      sb.removeChannel(channel);
+      sbRef.current = null;
+    };
+  }, [refetch]);
 
   /* Theme */
   useEffect(() => {
