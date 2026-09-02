@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { PHOTO_BUCKET, writeClient, photoUrl } from "@/lib/supabase";
+import { writeClient } from "@/lib/supabase";
+import { uploadImage, destroyImage } from "@/lib/cloudinary";
 
 export type UploadResult =
   | { ok: true; photoUrl: string }
@@ -35,23 +36,23 @@ export async function uploadPhoto(formData: FormData): Promise<UploadResult> {
   try {
     supabase = writeClient();
   } catch {
+    return { ok: false, error: "Server isn't configured for writes yet." };
+  }
+
+  // Upload to Cloudinary first.
+  let uploaded;
+  try {
+    const folder = `rm-stock/thaily-${safe(thaily)}`;
+    const publicId = `${safe(sr)}-${Date.now()}`;
+    uploaded = await uploadImage(file, folder, publicId);
+  } catch (e) {
     return {
       ok: false,
-      error: "Photo uploads aren't configured on the server yet.",
+      error: e instanceof Error ? e.message : "Photo upload failed.",
     };
   }
 
-  const ext = file.name.includes(".")
-    ? file.name.slice(file.name.lastIndexOf(".") + 1).toLowerCase()
-    : "jpg";
-  const path = `thaily-${safe(thaily)}/${safe(sr)}-${Date.now()}.${safe(ext)}`;
-
-  const { error: upErr } = await supabase.storage
-    .from(PHOTO_BUCKET)
-    .upload(path, file, { contentType: file.type, upsert: false });
-  if (upErr) return { ok: false, error: upErr.message };
-
-  // Point the row at the new object; remember the previous one to clean up.
+  // Point the row at the new image; remember the previous one to clean up.
   const { data: prev } = await supabase
     .from("rm_item")
     .select("photo_path")
@@ -61,22 +62,22 @@ export async function uploadPhoto(formData: FormData): Promise<UploadResult> {
 
   const { error: updErr } = await supabase
     .from("rm_item")
-    .update({ photo_path: path, photo_updated_at: new Date().toISOString() })
+    .update({ photo_path: uploaded.publicId, photo_updated_at: new Date().toISOString() })
     .eq("thaily", thaily)
     .eq("sr", Number(sr));
 
   if (updErr) {
-    await supabase.storage.from(PHOTO_BUCKET).remove([path]);
+    await destroyImage(uploaded.publicId); // roll back the orphaned upload
     return { ok: false, error: updErr.message };
   }
 
   const previous = prev?.photo_path as string | null | undefined;
-  if (previous && previous !== path) {
-    await supabase.storage.from(PHOTO_BUCKET).remove([previous]);
+  if (previous && previous !== uploaded.publicId) {
+    await destroyImage(previous);
   }
 
   revalidatePath("/");
-  return { ok: true, photoUrl: photoUrl(path)! };
+  return { ok: true, photoUrl: uploaded.url };
 }
 
 export type RemoveResult = { ok: boolean; error?: string };
@@ -110,7 +111,7 @@ export async function removePhoto(formData: FormData): Promise<RemoveResult> {
     .eq("sr", Number(sr));
   if (error) return { ok: false, error: error.message };
 
-  if (path) await supabase.storage.from(PHOTO_BUCKET).remove([path]);
+  if (path) await destroyImage(path);
 
   revalidatePath("/");
   return { ok: true };

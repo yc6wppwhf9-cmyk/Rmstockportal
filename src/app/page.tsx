@@ -1,4 +1,5 @@
-import { isConfigured, readClient, photoUrl } from "@/lib/supabase";
+import { isConfigured, readClient } from "@/lib/supabase";
+import { photoUrl } from "@/lib/cloudinary";
 import type { RmItem, RmItemView } from "@/lib/types";
 import { Portal } from "@/components/portal";
 

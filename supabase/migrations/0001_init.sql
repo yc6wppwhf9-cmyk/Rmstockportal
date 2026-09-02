@@ -1,8 +1,8 @@
 -- RM Stock Portal — schema.
 --
 -- One row per raw-material design, identified by its Thaily and serial number
--- (the two together are how the floor refers to any item). Photos live in the
--- `rm-photos` storage bucket; the row keeps only the object key.
+-- (the two together are how the floor refers to any item). Photos are hosted on
+-- Cloudinary; the row keeps only the Cloudinary public_id in `photo_path`.
 
 create table if not exists public.rm_item (
   id          bigint generated always as identity primary key,
@@ -14,7 +14,7 @@ create table if not exists public.rm_item (
   name        text,                          -- item name (Thaily 3 only)
   inventory   numeric,                       -- on-hand quantity from the sheet
   uom         text,                          -- Pcs / Mtr
-  photo_path  text,                          -- key in the rm-photos bucket, or null
+  photo_path  text,                          -- Cloudinary public_id, or null
   photo_updated_at timestamptz,
   created_at  timestamptz not null default now(),
   unique (thaily, sr)
@@ -31,9 +31,4 @@ alter table public.rm_item enable row level security;
 drop policy if exists rm_item_read on public.rm_item;
 create policy rm_item_read on public.rm_item for select using (true);
 
--- ── Storage bucket for photos ───────────────────────────────────────────────
--- Public-read so the gallery renders plain <img> URLs. Writes are done by the
--- server with the service-role key, which is not subject to these policies.
-insert into storage.buckets (id, name, public)
-values ('rm-photos', 'rm-photos', true)
-on conflict (id) do update set public = true;
+-- Photos are stored on Cloudinary, not in Supabase Storage — no bucket needed.
