@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RmItemView } from "@/lib/types";
 import { uploadPhoto, removePhoto } from "@/app/actions";
+import { CameraModal } from "./camera";
 
 const keyOf = (d: string, t: string, s: number) => `${d}::${t}::${s}`;
 const groupLabel = (dept: string, t: string) =>
@@ -23,7 +24,7 @@ const Layers = ({ w = 15 }: { w?: number }) => (
 );
 
 /* ── Image downscale ───────────────────────────────── */
-function downscale(file: File, maxDim = 1000, quality = 0.72): Promise<Blob> {
+function downscale(file: Blob, maxDim = 1100, quality = 0.75): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -68,10 +69,9 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const [statusFilter, setStatusFilter] = useState<"all" | "todo" | "done">("all");
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<Target | null>(null);
+  const [camTarget, setCamTarget] = useState<Target | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const fileRef = useRef<HTMLInputElement>(null);
-  const pendingRef = useRef<Target | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* Theme */
@@ -146,23 +146,21 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const totalInTab = perThaily[activeTab]?.total ?? 0;
 
   /* Capture */
-  const beginCapture = (t: Target) => { pendingRef.current = t; fileRef.current?.click(); };
+  const beginCapture = (t: Target) => setCamTarget(t);
   const onShotClick = (i: RmItemView) => {
     const t = { department: i.department, thaily: i.thaily, sr: i.sr };
     if (i.photoUrl) setLightbox(t);
     else beginCapture(t);
   };
 
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    const t = pendingRef.current;
-    pendingRef.current = null;
-    if (!file || !t) return;
+  const onCaptured = async (raw: Blob) => {
+    const t = camTarget;
+    setCamTarget(null);
+    if (!t) return;
     const k = keyOf(t.department, t.thaily, t.sr);
     setBusyKey(k);
     try {
-      const blob = await downscale(file);
+      const blob = await downscale(raw);
       const fd = new FormData();
       fd.append("department", t.department);
       fd.append("thaily", t.thaily);
@@ -357,8 +355,24 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
               <img src={lbItem.photoUrl ?? ""} alt={`Design ${lbItem.sr}`} />
             </div>
             <div className="lb-meta">
-              <span className="k">{lbItem.department} · {groupLabel(lbItem.department, lbItem.thaily)} · Serial</span>
-              <h3>#{lbItem.sr}</h3>
+              <span className="k">{lbItem.department} · {groupLabel(lbItem.department, lbItem.thaily)} · #{lbItem.sr}</span>
+              {lbItem.name && <h3>{lbItem.name}</h3>}
+              <div className="lb-details">
+                <div><span className="dk">Size</span><span className="dv">{lbItem.size || "—"}</span></div>
+                <div><span className="dk">Inventory</span><span className="dv">{lbItem.inventory ?? "—"} {lbItem.uom || ""}</span></div>
+                {lbItem.character && (
+                  <div className="full"><span className="dk">Design</span><span className="dv">{lbItem.character}</span></div>
+                )}
+                {lbItem.colour && (
+                  <div className="full">
+                    <span className="dk">Colour</span>
+                    <span className="lb-chips">
+                      {lbItem.colour.split(/[-/]/).map((c) => c.trim()).filter(Boolean)
+                        .map((c, idx) => <span className="chip" key={idx}>{c}</span>)}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="lb-actions">
               <button className="btn primary" onClick={() => { const t = lightbox; setLightbox(null); beginCapture(t); }}>
@@ -371,7 +385,14 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
         </div>
       )}
 
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
+      {camTarget && (
+        <CameraModal
+          title={`${camTarget.department} · ${groupLabel(camTarget.department, camTarget.thaily)}`}
+          subtitle={`Serial #${camTarget.sr}`}
+          onCapture={onCaptured}
+          onClose={() => setCamTarget(null)}
+        />
+      )}
       <div className={`toast${toast ? " show" : ""}`}>{toast}</div>
     </>
   );
