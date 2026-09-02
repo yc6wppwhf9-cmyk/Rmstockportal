@@ -1,5 +1,6 @@
 export type RmItem = {
   id: number;
+  department: string;
   thaily: string;
   sr: number;
   size: string | null;

@@ -17,11 +17,12 @@ function safe(seg: string): string {
 
 /** Upload (or replace) the photo for one item, identified by thaily + serial. */
 export async function uploadPhoto(formData: FormData): Promise<UploadResult> {
+  const department = String(formData.get("department") ?? "").trim();
   const thaily = String(formData.get("thaily") ?? "").trim();
   const sr = String(formData.get("sr") ?? "").trim();
   const file = formData.get("photo");
 
-  if (!thaily || !sr) return { ok: false, error: "Missing item." };
+  if (!department || !thaily || !sr) return { ok: false, error: "Missing item." };
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, error: "Choose an image." };
   }
@@ -56,6 +57,7 @@ export async function uploadPhoto(formData: FormData): Promise<UploadResult> {
   const { data: prev } = await supabase
     .from("rm_item")
     .select("photo_path")
+    .eq("department", department)
     .eq("thaily", thaily)
     .eq("sr", Number(sr))
     .single();
@@ -63,6 +65,7 @@ export async function uploadPhoto(formData: FormData): Promise<UploadResult> {
   const { error: updErr } = await supabase
     .from("rm_item")
     .update({ photo_path: uploaded.publicId, photo_updated_at: new Date().toISOString() })
+    .eq("department", department)
     .eq("thaily", thaily)
     .eq("sr", Number(sr));
 
@@ -84,9 +87,10 @@ export type RemoveResult = { ok: boolean; error?: string };
 
 /** Remove the photo for one item. */
 export async function removePhoto(formData: FormData): Promise<RemoveResult> {
+  const department = String(formData.get("department") ?? "").trim();
   const thaily = String(formData.get("thaily") ?? "").trim();
   const sr = String(formData.get("sr") ?? "").trim();
-  if (!thaily || !sr) return { ok: false, error: "Missing item." };
+  if (!department || !thaily || !sr) return { ok: false, error: "Missing item." };
 
   let supabase;
   try {
@@ -98,6 +102,7 @@ export async function removePhoto(formData: FormData): Promise<RemoveResult> {
   const { data: row } = await supabase
     .from("rm_item")
     .select("photo_path")
+    .eq("department", department)
     .eq("thaily", thaily)
     .eq("sr", Number(sr))
     .single();
@@ -107,6 +112,7 @@ export async function removePhoto(formData: FormData): Promise<RemoveResult> {
   const { error } = await supabase
     .from("rm_item")
     .update({ photo_path: null, photo_updated_at: null })
+    .eq("department", department)
     .eq("thaily", thaily)
     .eq("sr", Number(sr));
   if (error) return { ok: false, error: error.message };

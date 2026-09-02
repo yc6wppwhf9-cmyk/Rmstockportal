@@ -12,11 +12,12 @@ export default async function Home() {
   const { data, error } = await supabase
     .from("rm_item")
     .select(
-      "id, thaily, sr, size, colour, character, name, inventory, uom, photo_path, photo_updated_at"
+      "id, department, thaily, sr, size, colour, character, name, inventory, uom, photo_path, photo_updated_at"
     )
+    .order("department", { ascending: true })
     .order("thaily", { ascending: true })
     .order("sr", { ascending: true })
-    .limit(2000);
+    .limit(5000);
 
   if (error) return <SetupNotice error={error.message} />;
 

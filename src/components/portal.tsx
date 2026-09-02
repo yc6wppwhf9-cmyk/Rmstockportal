@@ -1,16 +1,12 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RmItemView } from "@/lib/types";
 import { uploadPhoto, removePhoto } from "@/app/actions";
 
-const keyOf = (t: string, s: number) => `${t}:${s}`;
+const keyOf = (d: string, t: string, s: number) => `${d}::${t}::${s}`;
+const groupLabel = (dept: string, t: string) =>
+  dept === "Digital Print" ? `Thaily ${t}` : t;
 
 /* ── Icons ─────────────────────────────────────────── */
 const Cam = ({ w = 24 }: { w?: number }) => (
@@ -21,6 +17,9 @@ const Cam = ({ w = 24 }: { w?: number }) => (
 );
 const Check = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+);
+const Layers = ({ w = 15 }: { w?: number }) => (
+  <svg width={w} height={w} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m12 2 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5" /><path d="m3 17 9 5 9-5" /></svg>
 );
 
 /* ── Image downscale ───────────────────────────────── */
@@ -38,33 +37,41 @@ function downscale(file: File, maxDim = 1000, quality = 0.72): Promise<Blob> {
       const ctx = cv.getContext("2d");
       if (!ctx) return reject(new Error("no canvas"));
       ctx.drawImage(img, 0, 0, w, h);
-      cv.toBlob(
-        (b) => (b ? resolve(b) : reject(new Error("encode failed"))),
-        "image/jpeg",
-        quality
-      );
+      cv.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/jpeg", quality);
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("decode")); };
     img.src = url;
   });
 }
 
+type Target = { department: string; thaily: string; sr: number };
+
 export function Portal({ items: initial }: { items: RmItemView[] }) {
   const [items, setItems] = useState<RmItemView[]>(initial);
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  const thailys = useMemo(
-    () => [...new Set(initial.map((i) => i.thaily))].sort((a, b) => Number(a) - Number(b)),
+
+  const departments = useMemo(
+    () => [...new Set(initial.map((i) => i.department))].sort((a, b) => a.localeCompare(b)),
     [initial]
   );
-  const [activeTab, setActiveTab] = useState<string>(thailys[0] ?? "1");
+  const [activeDept, setActiveDept] = useState<string>(departments[0] ?? "Digital Print");
+
+  const thailysFor = useCallback(
+    (dept: string) =>
+      [...new Set(items.filter((i) => i.department === dept).map((i) => i.thaily))]
+        .sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b)),
+    [items]
+  );
+  const [activeTab, setActiveTab] = useState<string>(thailysFor(departments[0] ?? "")[0] ?? "");
+
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "todo" | "done">("all");
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState<{ thaily: string; sr: number } | null>(null);
+  const [lightbox, setLightbox] = useState<Target | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
-  const pendingRef = useRef<{ thaily: string; sr: number } | null>(null);
+  const pendingRef = useRef<Target | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* Theme */
@@ -90,102 +97,108 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
     toastTimer.current = setTimeout(() => setToast(null), 2800);
   }, []);
 
+  const pickDept = (dept: string) => {
+    setActiveDept(dept);
+    setActiveTab(thailysFor(dept)[0] ?? "");
+    setQuery("");
+  };
+
   /* Counts */
-  const total = items.length;
-  const doneTotal = items.filter((i) => i.photoUrl).length;
-  const perThaily = useMemo(() => {
+  const deptStats = useMemo(() => {
     const m: Record<string, { done: number; total: number }> = {};
     for (const i of items) {
-      const e = (m[i.thaily] ??= { done: 0, total: 0 });
+      const e = (m[i.department] ??= { done: 0, total: 0 });
       e.total++;
       if (i.photoUrl) e.done++;
     }
     return m;
   }, [items]);
 
+  const thailys = thailysFor(activeDept);
+  const perThaily = useMemo(() => {
+    const m: Record<string, { done: number; total: number }> = {};
+    for (const i of items) {
+      if (i.department !== activeDept) continue;
+      const e = (m[i.thaily] ??= { done: 0, total: 0 });
+      e.total++;
+      if (i.photoUrl) e.done++;
+    }
+    return m;
+  }, [items, activeDept]);
+
+  const dStat = deptStats[activeDept] ?? { done: 0, total: 0 };
+
   /* Filtering */
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((i) => {
+      if (i.department !== activeDept) return false;
       if (i.thaily !== activeTab) return false;
       if (statusFilter === "done" && !i.photoUrl) return false;
       if (statusFilter === "todo" && i.photoUrl) return false;
       if (q) {
-        const hay = [i.sr, i.size, i.colour, i.character, i.name]
-          .filter(Boolean).join(" ").toLowerCase();
+        const hay = [i.sr, i.size, i.colour, i.character, i.name].filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [items, activeTab, statusFilter, query]);
+  }, [items, activeDept, activeTab, statusFilter, query]);
   const totalInTab = perThaily[activeTab]?.total ?? 0;
 
   /* Capture */
-  const beginCapture = (thaily: string, sr: number) => {
-    pendingRef.current = { thaily, sr };
-    fileRef.current?.click();
-  };
+  const beginCapture = (t: Target) => { pendingRef.current = t; fileRef.current?.click(); };
   const onShotClick = (i: RmItemView) => {
-    if (i.photoUrl) setLightbox({ thaily: i.thaily, sr: i.sr });
-    else beginCapture(i.thaily, i.sr);
+    const t = { department: i.department, thaily: i.thaily, sr: i.sr };
+    if (i.photoUrl) setLightbox(t);
+    else beginCapture(t);
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
-    const target = pendingRef.current;
+    const t = pendingRef.current;
     pendingRef.current = null;
-    if (!file || !target) return;
-    const k = keyOf(target.thaily, target.sr);
+    if (!file || !t) return;
+    const k = keyOf(t.department, t.thaily, t.sr);
     setBusyKey(k);
     try {
       const blob = await downscale(file);
       const fd = new FormData();
-      fd.append("thaily", target.thaily);
-      fd.append("sr", String(target.sr));
+      fd.append("department", t.department);
+      fd.append("thaily", t.thaily);
+      fd.append("sr", String(t.sr));
       fd.append("photo", new File([blob], "photo.jpg", { type: "image/jpeg" }));
       const res = await uploadPhoto(fd);
       if (res.ok) {
-        setItems((prev) =>
-          prev.map((i) =>
-            i.thaily === target.thaily && i.sr === target.sr
-              ? { ...i, photoUrl: `${res.photoUrl}?t=${Date.now()}` }
-              : i
-          )
-        );
-        showToast(`Photo saved — Thaily ${target.thaily} · #${target.sr}`);
-      } else {
-        showToast(res.error);
-      }
+        setItems((prev) => prev.map((i) =>
+          i.department === t.department && i.thaily === t.thaily && i.sr === t.sr
+            ? { ...i, photoUrl: `${res.photoUrl}?t=${Date.now()}` } : i));
+        showToast(`Photo saved — ${groupLabel(t.department, t.thaily)} · #${t.sr}`);
+      } else showToast(res.error);
     } catch {
       showToast("Couldn’t process that image. Try again.");
-    } finally {
-      setBusyKey(null);
-    }
+    } finally { setBusyKey(null); }
   };
 
   const doRemove = async () => {
     if (!lightbox) return;
-    const { thaily, sr } = lightbox;
+    const t = lightbox;
     setLightbox(null);
     const fd = new FormData();
-    fd.append("thaily", thaily);
-    fd.append("sr", String(sr));
+    fd.append("department", t.department);
+    fd.append("thaily", t.thaily);
+    fd.append("sr", String(t.sr));
     const res = await removePhoto(fd);
     if (res.ok) {
-      setItems((prev) =>
-        prev.map((i) =>
-          i.thaily === thaily && i.sr === sr ? { ...i, photoUrl: null } : i
-        )
-      );
-      showToast(`Photo removed — Thaily ${thaily} · #${sr}`);
-    } else {
-      showToast(res.error ?? "Couldn’t remove photo.");
-    }
+      setItems((prev) => prev.map((i) =>
+        i.department === t.department && i.thaily === t.thaily && i.sr === t.sr
+          ? { ...i, photoUrl: null } : i));
+      showToast(`Photo removed — ${groupLabel(t.department, t.thaily)} · #${t.sr}`);
+    } else showToast(res.error ?? "Couldn’t remove photo.");
   };
 
   const lbItem = lightbox
-    ? items.find((i) => i.thaily === lightbox.thaily && i.sr === lightbox.sr)
+    ? items.find((i) => i.department === lightbox.department && i.thaily === lightbox.thaily && i.sr === lightbox.sr)
     : null;
 
   const C = 2 * Math.PI * 15.5;
@@ -204,19 +217,19 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
             <div className="mark"><Cam w={19} /></div>
             <div className="title-wrap">
               <h1>RM Stock Portal</h1>
-              <p>Photograph each design by serial number</p>
+              <p>{activeDept} · photograph each design</p>
             </div>
           </div>
           <div className="head-right">
-            <div className="progress-chip" title="Designs photographed">
+            <div className="progress-chip" title={`Photographed in ${activeDept}`}>
               <svg className="ring" viewBox="0 0 36 36" aria-hidden="true">
                 <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--line-strong)" strokeWidth="3" />
                 <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--accent)" strokeWidth="3"
                   strokeLinecap="round" transform="rotate(-90 18 18)"
                   strokeDasharray={C.toFixed(1)}
-                  strokeDashoffset={(C * (1 - (total ? doneTotal / total : 0))).toFixed(1)} />
+                  strokeDashoffset={(C * (1 - (dStat.total ? dStat.done / dStat.total : 0))).toFixed(1)} />
               </svg>
-              <div className="txt"><span>Photographed </span><b>{doneTotal} / {total}</b></div>
+              <div className="txt"><span>Photographed </span><b>{dStat.done} / {dStat.total}</b></div>
             </div>
             <button className="theme-btn" onClick={toggleTheme} aria-label="Toggle light and dark theme">
               {theme === "dark" ? (
@@ -229,8 +242,22 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
         </div>
       </header>
 
+      {/* Department selector */}
+      <div className="dept-bar" role="tablist" aria-label="Department">
+        {departments.map((d) => {
+          const c = deptStats[d] ?? { done: 0, total: 0 };
+          return (
+            <button key={d} className="dept-chip" role="tab" aria-selected={d === activeDept}
+              onClick={() => pickDept(d)}>
+              <Layers /> {d} <span className="c">{c.done}/{c.total}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Group (Thaily) tabs */}
       <div className="tabs-wrap">
-        <div className="tabs" role="tablist">
+        <div className="tabs" role="tablist" aria-label="Group">
           {thailys.map((t) => {
             const c = perThaily[t] ?? { done: 0, total: 0 };
             const dot = c.done === 0 ? "empty" : c.done === c.total ? "" : "partial";
@@ -238,7 +265,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
               <button key={t} className="tab" role="tab" aria-selected={t === activeTab}
                 onClick={() => setActiveTab(t)}>
                 <span className={`dot ${dot}`} />
-                Thaily {t}
+                {groupLabel(activeDept, t)}
                 <span className="count">{c.done}/{c.total}</span>
               </button>
             );
@@ -261,7 +288,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
         </div>
       </div>
       <div className="count-line">
-        Showing <b>{shown.length}</b> of <b>{totalInTab}</b> designs in Thaily {activeTab}
+        Showing <b>{shown.length}</b> of <b>{totalInTab}</b> in {groupLabel(activeDept, activeTab)}
       </div>
 
       <main>
@@ -270,7 +297,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
             <div className="empty-grid">No designs match your search or filter.</div>
           ) : (
             shown.map((i) => {
-              const k = keyOf(i.thaily, i.sr);
+              const k = keyOf(i.department, i.thaily, i.sr);
               const busy = busyKey === k;
               const has = Boolean(i.photoUrl);
               return (
@@ -278,7 +305,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                   <div className={`shot${busy ? " busy" : ""}`} onClick={() => onShotClick(i)}
                     role="button" tabIndex={0}
                     onKeyDown={(e) => { if (e.key === "Enter") onShotClick(i); }}
-                    aria-label={`Thaily ${i.thaily} serial ${i.sr}${has ? ", view or retake photo" : ", take photo"}`}>
+                    aria-label={`Serial ${i.sr}${has ? ", view or retake photo" : ", take photo"}`}>
                     <span className="sr-badge">#{i.sr}</span>
                     <span className={`stat ${has ? "done" : "todo"}`} aria-hidden="true">
                       {has ? <Check /> : <Cam w={14} />}
@@ -305,8 +332,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                     {i.name && <div className="name">{i.name}</div>}
                     <div className="chips">
                       {i.character && <span className="chip design">{i.character}</span>}
-                      {(i.colour ?? "")
-                        .split(/[-/]/).map((x) => x.trim()).filter(Boolean)
+                      {(i.colour ?? "").split(/[-/]/).map((x) => x.trim()).filter(Boolean)
                         .map((c, idx) => <span className="chip" key={idx}>{c}</span>)}
                     </div>
                   </div>
@@ -319,7 +345,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
 
       <div className="foot">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 3 7v6c0 5 3.5 8 9 9 5.5-1 9-4 9-9V7l-9-5Z" /></svg>
-        <span>Photos are stored in the cloud and shared with everyone. Data from DIGITAL_PRINT.xlsx (Thaily 1–3).</span>
+        <span>Photos are stored in the cloud and shared with everyone.</span>
       </div>
 
       {lightbox && lbItem && (
@@ -331,11 +357,11 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
               <img src={lbItem.photoUrl ?? ""} alt={`Design ${lbItem.sr}`} />
             </div>
             <div className="lb-meta">
-              <span className="k">Thaily {lbItem.thaily} · Serial</span>
+              <span className="k">{lbItem.department} · {groupLabel(lbItem.department, lbItem.thaily)} · Serial</span>
               <h3>#{lbItem.sr}</h3>
             </div>
             <div className="lb-actions">
-              <button className="btn primary" onClick={() => { const t = lightbox; setLightbox(null); beginCapture(t.thaily, t.sr); }}>
+              <button className="btn primary" onClick={() => { const t = lightbox; setLightbox(null); beginCapture(t); }}>
                 <Cam w={15} /> Retake
               </button>
               <button className="btn" onClick={() => setLightbox(null)}>Close</button>

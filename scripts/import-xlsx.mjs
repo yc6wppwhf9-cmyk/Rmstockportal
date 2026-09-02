@@ -2,21 +2,27 @@
 /**
  * Import an RM stock workbook into Supabase.
  *
- * Each sheet is treated as one Thaily (the sheet name's trailing number, or the
- * sheet name itself). Recognised columns (case-insensitive): SR NO, Size, Name,
- * Colour, Character(Design), Inventory, UOM.
+ * Each sheet is treated as one group ("Thaily" for Digital Print) — the sheet
+ * name's trailing number, or the sheet name itself. The whole workbook is one
+ * department; pass it with --department (default "Digital Print"). Recognised
+ * columns (case-insensitive): SR NO, Size, Name, Colour, Character(Design),
+ * Inventory, UOM.
  *
- *   SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/import-xlsx.mjs path/to/file.xlsx
+ *   SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
+ *     node scripts/import-xlsx.mjs path/to/file.xlsx --department Labels
  *
- * Upserts on (thaily, sr); never touches photo_path.
+ * Upserts on (department, thaily, sr); never touches photo_path.
  */
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 
-const file = process.argv[2];
+const args = process.argv.slice(2);
+const deptFlag = args.indexOf("--department");
+const department = deptFlag !== -1 ? args[deptFlag + 1] : "Digital Print";
+const file = args.find((a, i) => !a.startsWith("--") && i !== deptFlag + 1);
 if (!file) {
-  console.error("Usage: node scripts/import-xlsx.mjs <file.xlsx>");
+  console.error("Usage: node scripts/import-xlsx.mjs <file.xlsx> [--department Name]");
   process.exit(1);
 }
 const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -48,6 +54,7 @@ for (const sheetName of wb.SheetNames) {
     const sr = pick(r, idx, "sr no", "sr", "serial");
     if (sr == null || sr === "") continue;
     rows.push({
+      department,
       thaily,
       sr: Number(sr),
       size: pick(r, idx, "size"),
@@ -60,7 +67,7 @@ for (const sheetName of wb.SheetNames) {
   }
 }
 
-console.log(`Parsed ${rows.length} rows from ${wb.SheetNames.length} sheet(s).`);
+console.log(`Parsed ${rows.length} rows from ${wb.SheetNames.length} sheet(s) into department "${department}".`);
 const supabase = createClient(url, key, { auth: { persistSession: false } });
 
 let done = 0;
@@ -68,7 +75,7 @@ for (let i = 0; i < rows.length; i += 200) {
   const batch = rows.slice(i, i + 200);
   const { error } = await supabase
     .from("rm_item")
-    .upsert(batch, { onConflict: "thaily,sr", ignoreDuplicates: false });
+    .upsert(batch, { onConflict: "department,thaily,sr", ignoreDuplicates: false });
   if (error) { console.error("Upsert failed:", error.message); process.exit(1); }
   done += batch.length;
   console.log(`  upserted ${done}/${rows.length}`);

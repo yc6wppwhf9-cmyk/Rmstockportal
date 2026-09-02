@@ -9,7 +9,10 @@ Built with Next.js (App Router), Supabase (item catalogue), and Cloudinary
 
 ## Features
 
-- **Thaily tabs** — Thaily 1 / 2 / 3, each with a live "photographed" count.
+- **Departments** — top-level switcher (Digital Print today; Labels, Runner,
+  Patta, … later), each with its own groups and photographed count.
+- **Group tabs** — for Digital Print these are Thaily 1 / 2 / 3, each with a live
+  "photographed" count.
 - **Item cards** — serial no, size, colour codes, design/character, item name,
   inventory + UOM.
 - **Live photo capture** — tap a card to open the phone camera; the shot is
@@ -48,15 +51,18 @@ npm run dev
 Open http://localhost:3000. (Photo capture uses the camera — use HTTPS or
 localhost, which browsers treat as secure.)
 
-## Re-importing / updating the catalogue
+## Adding a department / re-importing
 
-To load a different or updated workbook (any sheet layout with SR NO, Size,
-Colour, Character(Design), Name, Inventory, UOM columns — one sheet per Thaily):
+Each department is one workbook; each sheet is a group (Thaily for Digital
+Print), with SR NO, Size, Colour, Character(Design), Name, Inventory, UOM
+columns. To load one:
 
 ```bash
-SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… npm run seed -- path/to/file.xlsx
+SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
+  npm run seed -- path/to/labels.xlsx --department Labels
 ```
-It upserts on `(thaily, sr)` and never touches existing photos.
+It upserts on `(department, thaily, sr)` and never touches existing photos. The
+new department shows up automatically in the app's department switcher.
 
 ## How photos are stored
 
