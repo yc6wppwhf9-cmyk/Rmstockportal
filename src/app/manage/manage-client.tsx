@@ -44,6 +44,7 @@ export function ManageClient({
     <div className="panels">
       <ImportPanel departments={departments} />
       <AddItemPanel departments={departments} />
+      <ExportPanel departments={departments} />
       {gated && (
         <p className="hint-note" style={{ textAlign: "center" }}>
           You’re unlocked on this device. Viewing and photographing don’t need the passcode.
@@ -157,6 +158,25 @@ function ImportPanel({ departments }: { departments: string[] }) {
       </button>
       {!dept && <p className="hint-note">Select or name a department to enable the file picker.</p>}
     </form>
+  );
+}
+
+/* ── Export ───────────────────────────────────────── */
+function ExportPanel({ departments }: { departments: string[] }) {
+  return (
+    <div className="panel">
+      <h2>Export to Excel</h2>
+      <p className="sub">Downloads an .xlsx with all fields and each item’s photo embedded in the row.</p>
+      <a className="btn primary block" href="/export">Export everything (with photos)</a>
+      {departments.length > 1 && (
+        <div className="form-grid" style={{ marginTop: 12 }}>
+          {departments.map((d) => (
+            <a key={d} className="btn" href={`/export?department=${encodeURIComponent(d)}`}>{d}</a>
+          ))}
+        </div>
+      )}
+      <p className="hint-note">Large departments take a few seconds to build while photos are fetched.</p>
+    </div>
   );
 }
 
