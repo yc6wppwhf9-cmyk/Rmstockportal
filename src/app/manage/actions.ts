@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { writeClient } from "@/lib/supabase";
 import { MANAGE_COOKIE, managePasscode, manageConfigured, isUnlocked } from "@/lib/manage";
 import { parseWorkbook } from "@/lib/parse-workbook";
+import { computePcs } from "@/lib/pcs";
 
 export type UnlockState = { ok: boolean; error?: string };
 
@@ -81,16 +82,20 @@ export async function addItem(formData: FormData): Promise<AddState> {
   if (colourName) extra["Colour"] = colourName;
   if (inv) extra["INV"] = inv;
 
+  const size = g("size") || null;
+  const uom = g("uom") || null;
+  const inventory = invRaw ? Number(invRaw.replace(/,/g, "")) : null;
   const record = {
     department,
     thaily,
     sr,
-    size: g("size") || null,
+    size,
     colour: g("colour") || null,
     character: g("character") || null,
     name: g("name") || null,
-    inventory: invRaw ? Number(invRaw.replace(/,/g, "")) : null,
-    uom: g("uom") || null,
+    inventory,
+    uom,
+    qty_pcs: computePcs(uom, inventory, size),
     extra,
   };
 

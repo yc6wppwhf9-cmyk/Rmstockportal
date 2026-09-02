@@ -12,7 +12,7 @@ export default async function Home() {
   const { data, error } = await supabase
     .from("rm_item")
     .select(
-      "id, department, thaily, sr, size, colour, character, name, inventory, uom, photo_path, photo_updated_at, extra"
+      "id, department, thaily, sr, size, colour, character, name, inventory, uom, qty_pcs, photo_path, photo_updated_at, extra"
     )
     .order("department", { ascending: true })
     .order("thaily", { ascending: true })

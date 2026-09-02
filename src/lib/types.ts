@@ -9,6 +9,7 @@ export type RmItem = {
   name: string | null;
   inventory: number | null;
   uom: string | null;
+  qty_pcs: number | null;
   photo_path: string | null;
   photo_updated_at: string | null;
   extra: Record<string, string> | null;

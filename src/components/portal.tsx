@@ -11,7 +11,7 @@ const groupLabel = (dept: string, t: string) =>
   dept === "Digital Print" ? `Thaily ${t}` : t;
 
 const SELECT =
-  "id, department, thaily, sr, size, colour, character, name, inventory, uom, photo_path, photo_updated_at, extra";
+  "id, department, thaily, sr, size, colour, character, name, inventory, uom, qty_pcs, photo_path, photo_updated_at, extra";
 
 /** Client-safe Cloudinary URL (reads only the public cloud name). */
 const CLOUD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -421,6 +421,9 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                         <span className="uom">{i.uom || ""}</span>
                       </span>
                     </div>
+                    {/^\s*m/i.test(i.uom ?? "") && i.qty_pcs != null && (
+                      <div className="pcs-note">≈ {i.qty_pcs.toLocaleString()} Pcs</div>
+                    )}
                     {i.name && <div className="name">{i.name}</div>}
                     <div className="chips">
                       {i.character && <span className="chip design">{i.character}</span>}
@@ -454,6 +457,9 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
               <div className="lb-details">
                 <div><span className="dk">Size</span><span className="dv">{lbItem.size || "—"}</span></div>
                 <div><span className="dk">Inventory</span><span className="dv">{lbItem.inventory ?? "—"} {lbItem.uom || ""}</span></div>
+                {/^\s*m/i.test(lbItem.uom ?? "") && lbItem.qty_pcs != null && (
+                  <div><span className="dk">Pieces (calc)</span><span className="dv">{lbItem.qty_pcs.toLocaleString()} Pcs</span></div>
+                )}
                 {lbItem.character && (
                   <div className="full"><span className="dk">Design</span><span className="dv">{lbItem.character}</span></div>
                 )}

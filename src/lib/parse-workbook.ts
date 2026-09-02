@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { computePcs } from "./pcs";
 
 export type ParsedRow = {
   department: string;
@@ -10,6 +11,7 @@ export type ParsedRow = {
   name: string | null;
   inventory: number | null;
   uom: string | null;
+  qty_pcs: number | null;
   extra: Record<string, string>;
 };
 
@@ -121,16 +123,21 @@ export function parseWorkbook(buf: ArrayBuffer, department: string): ParsedRow[]
       const stockHeader = MAP.inventory.find((n) => n in idx);
       const inferredUom = stockHeader && /\(([^)]+)\)/.exec(stockHeader)?.[1];
 
+      const size = iSize !== undefined ? clean(row[iSize]) : null;
+      const inventory = iInvq !== undefined ? num(row[iInvq]) : null;
+      const uom = (iUom !== undefined ? clean(row[iUom]) : null) ?? (inferredUom ? titleCase(inferredUom) : null);
+
       out.push({
         department,
         thaily: group,
         sr,
-        size: iSize !== undefined ? clean(row[iSize]) : null,
+        size,
         colour,
         character: iChar !== undefined ? clean(row[iChar]) : null,
         name: iName !== undefined ? clean(row[iName]) : null,
-        inventory: iInvq !== undefined ? num(row[iInvq]) : null,
-        uom: (iUom !== undefined ? clean(row[iUom]) : null) ?? (inferredUom ? titleCase(inferredUom) : null),
+        inventory,
+        uom,
+        qty_pcs: computePcs(uom, inventory, size),
         extra,
       });
     }

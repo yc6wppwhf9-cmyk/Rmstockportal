@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const SELECT =
-  "id, department, thaily, sr, size, colour, character, name, inventory, uom, photo_path, extra";
+  "id, department, thaily, sr, size, colour, character, name, inventory, uom, qty_pcs, photo_path, extra";
 const CLOUD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 
 function enc(publicId: string): string {
@@ -87,6 +87,7 @@ export async function GET(req: Request) {
       { header: "Design", key: "character", width: 16 },
       { header: "Inventory", key: "inv", width: 12 },
       { header: "UOM", key: "uom", width: 8 },
+      { header: "Qty (Pcs)", key: "pcs", width: 12 },
       { header: "INV Code", key: "invcode", width: 14 },
       { header: "Photo URL", key: "url", width: 44 },
     ];
@@ -107,6 +108,7 @@ export async function GET(req: Request) {
         character: it.character ?? "",
         inv: it.inventory ?? "",
         uom: it.uom ?? "",
+        pcs: it.qty_pcs ?? "",
         invcode: extra["INV"] ?? "",
         url: it.photo_path ? fullUrl(it.photo_path) : "",
       });

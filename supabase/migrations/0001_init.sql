@@ -17,6 +17,7 @@ create table if not exists public.rm_item (
   name        text,                          -- item name
   inventory   numeric,                       -- on-hand quantity from the sheet
   uom         text,                          -- Pcs / Mtr
+  qty_pcs     numeric,                       -- inventory in pieces (metres × 2145 ÷ size)
   photo_path  text,                          -- Cloudinary public_id, or null
   photo_updated_at timestamptz,
   extra       jsonb not null default '{}'::jsonb,  -- department-specific fields
