@@ -19,6 +19,7 @@ create table if not exists public.rm_item (
   uom         text,                          -- Pcs / Mtr
   photo_path  text,                          -- Cloudinary public_id, or null
   photo_updated_at timestamptz,
+  extra       jsonb not null default '{}'::jsonb,  -- department-specific fields
   created_at  timestamptz not null default now(),
   unique (department, thaily, sr)
 );

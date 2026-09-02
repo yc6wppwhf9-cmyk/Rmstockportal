@@ -183,6 +183,27 @@ main{max-width:1180px;margin:0 auto;padding:16px 18px 80px}
 .notice code{font-family:var(--font-mono);font-size:12px;background:var(--surface-2);padding:2px 6px;border-radius:5px}
 .notice pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow-x:auto;font-family:var(--font-mono);font-size:12px}
 
+/* Manage / add-items */
+.panels{max-width:640px;margin:8px auto 0;display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
+.panel h2{font-size:15px;font-weight:600;margin-bottom:3px}
+.panel .sub{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-grid .full{grid-column:1/-1}
+.fld{display:flex;flex-direction:column;gap:5px}
+.fld label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.fld input,.fld select{font-family:var(--font-body);font-size:14px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line);border-radius:10px;padding:10px 11px;outline:none;width:100%}
+.fld input:focus,.fld select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.fld input:disabled,.fld select:disabled{opacity:.5;cursor:not-allowed;background:var(--surface-2)}
+.file-drop{border:1.5px dashed var(--line-strong);border-radius:12px;padding:16px;text-align:center;color:var(--muted);font-size:13px}
+.file-drop input{margin-top:8px;font-size:13px;width:100%}
+.msg{margin-top:12px;border-radius:10px;padding:10px 13px;font-size:13px}
+.msg.ok{background:var(--accent-soft);color:var(--accent)}
+.msg.err{background:rgba(192,57,43,.1);color:#c0392b}
+.btn.block{width:100%;justify-content:center;margin-top:14px}
+.hint-note{color:var(--faint);font-size:11.5px;margin-top:10px}
+
 /* In-app camera */
 .cam{position:fixed;inset:0;z-index:100;background:#000;overflow:hidden;touch-action:none}
 .cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}

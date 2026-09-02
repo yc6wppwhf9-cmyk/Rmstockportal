@@ -11,6 +11,7 @@ export type RmItem = {
   uom: string | null;
   photo_path: string | null;
   photo_updated_at: string | null;
+  extra: Record<string, string> | null;
 };
 
 /** Item plus its resolved public photo URL, ready for the client. */
