@@ -284,14 +284,28 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const lbItem = lightbox
     ? items.find((i) => i.department === lightbox.department && i.thaily === lightbox.thaily && i.sr === lightbox.sr)
     : null;
+  const lbIndex = lightbox
+    ? shown.findIndex((i) => i.department === lightbox.department && i.thaily === lightbox.thaily && i.sr === lightbox.sr)
+    : -1;
+  const stepLightbox = (dir: 1 | -1) => {
+    if (lbIndex < 0) return;
+    const n = shown[lbIndex + dir];
+    if (n) setLightbox({ department: n.department, thaily: n.thaily, sr: n.sr });
+  };
 
   const C = 2 * Math.PI * 15.5;
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLightbox(null); };
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightbox(null);
+      else if (e.key === "ArrowLeft") stepLightbox(-1);
+      else if (e.key === "ArrowRight") stepLightbox(1);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightbox, shown]);
 
   return (
     <>
@@ -448,8 +462,19 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
           onClick={(e) => { if (e.target === e.currentTarget) setLightbox(null); }}>
           <div className="lb-card">
             <div className="lb-img">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={lbItem.photoUrl ?? ""} alt={`Design ${lbItem.sr}`} />
+              {lbItem.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={lbItem.photoUrl} alt={`Design ${lbItem.sr}`} />
+              ) : (
+                <div className="lb-empty"><Cam w={34} /><span>No photo yet</span></div>
+              )}
+              <button className="lb-nav prev" onClick={() => stepLightbox(-1)} disabled={lbIndex <= 0} aria-label="Previous item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+              </button>
+              <button className="lb-nav next" onClick={() => stepLightbox(1)} disabled={lbIndex < 0 || lbIndex >= shown.length - 1} aria-label="Next item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+              </button>
+              {lbIndex >= 0 && <span className="lb-pos">{lbIndex + 1} / {shown.length}</span>}
             </div>
             <div className="lb-meta">
               <span className="k">{lbItem.department} · {groupLabel(lbItem.department, lbItem.thaily)} · #{lbItem.sr}</span>
@@ -475,11 +500,11 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
               </div>
             </div>
             <div className="lb-actions">
-              <button className="btn primary" onClick={() => { const t = lightbox; setLightbox(null); beginCapture(t); }}>
-                <Cam w={15} /> Retake
+              <button className="btn primary" onClick={() => { const t = lightbox; beginCapture(t); }}>
+                <Cam w={15} /> {lbItem.photoUrl ? "Retake" : "Take photo"}
               </button>
               <button className="btn" onClick={() => setLightbox(null)}>Close</button>
-              <button className="btn danger" onClick={doRemove}>Remove</button>
+              {lbItem.photoUrl && <button className="btn danger" onClick={doRemove}>Remove</button>}
             </div>
           </div>
         </div>
