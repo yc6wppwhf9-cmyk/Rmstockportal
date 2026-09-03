@@ -80,6 +80,10 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "todo" | "done">("all");
+  const [colours, setColours] = useState<Set<string>>(new Set());
+  const [invMin, setInvMin] = useState("");
+  const [invMax, setInvMax] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<Target | null>(null);
   const [camTarget, setCamTarget] = useState<Target | null>(null);
@@ -159,7 +163,29 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
     setActiveDept(dept);
     setActiveTab(thailysFor(dept)[0] ?? "");
     setQuery("");
+    setColours(new Set());
+    setInvMin("");
+    setInvMax("");
   };
+
+  // Colour codes present in the active department (for the colour filter).
+  const availColours = useMemo(() => {
+    const s = new Set<string>();
+    for (const i of items) {
+      if (i.department !== activeDept) continue;
+      (i.colour ?? "").split(/[-/]/).map((x) => x.trim()).filter(Boolean).forEach((c) => s.add(c));
+    }
+    return [...s].sort((a, b) => a.localeCompare(b));
+  }, [items, activeDept]);
+
+  const toggleColour = (c: string) =>
+    setColours((prev) => {
+      const n = new Set(prev);
+      if (n.has(c)) n.delete(c); else n.add(c);
+      return n;
+    });
+  const clearFilters = () => { setColours(new Set()); setInvMin(""); setInvMax(""); };
+  const activeFilters = colours.size + (invMin ? 1 : 0) + (invMax ? 1 : 0);
 
   const stepDept = (dir: 1 | -1) => {
     const i = departments.indexOf(activeDept);
@@ -217,18 +243,26 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   /* Filtering */
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const mn = invMin ? Number(invMin) : null;
+    const mx = invMax ? Number(invMax) : null;
     return items.filter((i) => {
       if (i.department !== activeDept) return false;
       if (i.thaily !== activeTab) return false;
       if (statusFilter === "done" && !i.photoUrl) return false;
       if (statusFilter === "todo" && i.photoUrl) return false;
+      if (colours.size) {
+        const toks = (i.colour ?? "").split(/[-/]/).map((x) => x.trim()).filter(Boolean);
+        if (!toks.some((t) => colours.has(t))) return false;
+      }
+      if (mn != null && (i.inventory == null || i.inventory < mn)) return false;
+      if (mx != null && (i.inventory == null || i.inventory > mx)) return false;
       if (q) {
         const hay = [i.sr, i.size, i.colour, i.character, i.name].filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [items, activeDept, activeTab, statusFilter, query]);
+  }, [items, activeDept, activeTab, statusFilter, query, colours, invMin, invMax]);
   const totalInTab = perThaily[activeTab]?.total ?? 0;
 
   /* Capture */
@@ -392,7 +426,26 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
             </button>
           ))}
         </div>
+        <button className="filters-btn" onClick={() => setFilterOpen(true)} aria-label="Open filters">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5h18M6 12h12M10 19h4" /></svg>
+          Filters{activeFilters > 0 && <span className="fbadge">{activeFilters}</span>}
+        </button>
       </div>
+
+      {activeFilters > 0 && (
+        <div className="active-filters">
+          {[...colours].map((c) => (
+            <button key={c} className="afchip" onClick={() => toggleColour(c)}>{c} ✕</button>
+          ))}
+          {(invMin || invMax) && (
+            <button className="afchip" onClick={() => { setInvMin(""); setInvMax(""); }}>
+              Stock {invMin || "0"}–{invMax || "∞"} ✕
+            </button>
+          )}
+          <button className="afclear" onClick={clearFilters}>Clear all</button>
+        </div>
+      )}
+
       <div className="count-line">
         Showing <b>{shown.length}</b> of <b>{totalInTab}</b> in {groupLabel(activeDept, activeTab)}
       </div>
@@ -505,6 +558,47 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
               </button>
               <button className="btn" onClick={() => setLightbox(null)}>Close</button>
               {lbItem.photoUrl && <button className="btn danger" onClick={doRemove}>Remove</button>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {filterOpen && (
+        <div className="sheet" role="dialog" aria-modal="true" aria-label="Filters"
+          onClick={(e) => { if (e.target === e.currentTarget) setFilterOpen(false); }}>
+          <div className="sheet-card">
+            <div className="sheet-head">
+              <h3>Filters</h3>
+              <button className="cam-x" style={{ background: "var(--surface-2)", color: "var(--ink)" }} onClick={() => setFilterOpen(false)} aria-label="Close">✕</button>
+            </div>
+
+            <div className="sheet-section">
+              <div className="sheet-label">Stock range ({activeDept === "Digital Print" ? "Pcs/Mtr" : "units"})</div>
+              <div className="range-row">
+                <input type="number" inputMode="numeric" placeholder="Min" value={invMin} onChange={(e) => setInvMin(e.target.value)} />
+                <span className="range-dash">–</span>
+                <input type="number" inputMode="numeric" placeholder="Max" value={invMax} onChange={(e) => setInvMax(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="sheet-section">
+              <div className="sheet-label">Colour {colours.size > 0 && `· ${colours.size} selected`}</div>
+              {availColours.length === 0 ? (
+                <p className="hint-note" style={{ margin: 0 }}>No colours on these items.</p>
+              ) : (
+                <div className="fchips">
+                  {availColours.map((c) => (
+                    <button key={c} className={`fchip${colours.has(c) ? " on" : ""}`} onClick={() => toggleColour(c)}>{c}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="sheet-actions">
+              <button className="btn" onClick={clearFilters} disabled={activeFilters === 0}>Clear all</button>
+              <button className="btn primary" onClick={() => setFilterOpen(false)}>
+                Show {shown.length} result{shown.length === 1 ? "" : "s"}
+              </button>
             </div>
           </div>
         </div>
