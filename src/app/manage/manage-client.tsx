@@ -2,10 +2,13 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { unlock, importWorkbook, addItem, importPhotos, type UnlockState, type ImportState } from "./actions";
+import { createClient } from "@supabase/supabase-js";
+import { unlock, importWorkbook, addItem, type UnlockState, type ImportState } from "./actions";
 import { uploadPhoto } from "@/app/actions";
 import { CameraModal } from "@/components/camera";
 import { computePcs, isMeter, sizeProduct } from "@/lib/pcs";
+import { extractImagesBySerial } from "@/lib/extract-xlsx-images";
+import { fetchAllItems } from "@/lib/fetch-items";
 
 /** Downscale an image before upload (bounds size for camera and gallery). */
 function downscale(file: Blob, maxDim = 1100, quality = 0.75): Promise<Blob> {
@@ -177,24 +180,54 @@ function PhotosPanel({ departments }: { departments: string[] }) {
     const file = fileRef.current?.files?.[0];
     if (!dept || !file) return;
     setRunning(true); setMsg(null); setProg(null);
-    let guard = 0;
     try {
-      while (true) {
-        const fd = new FormData();
-        fd.append("department", dept);
-        fd.append("file", file);
-        const res = await importPhotos(null, fd);
-        if (!res || !res.ok) { setMsg({ ok: false, text: res?.ok === false ? res.error : "Photo import failed." }); break; }
-        setProg({ done: res.total - res.remaining, total: res.total, failed: res.failed });
-        if (res.remaining <= 0) {
-          setMsg({ ok: true, text: `Done — linked ${res.total - res.failed} photo(s)${res.failed ? `, ${res.failed} couldn’t be matched` : ""}.` });
-          break;
-        }
-        if (res.uploaded === 0) { guard++; if (guard >= 2) { setMsg({ ok: false, text: `Stopped — ${res.remaining} photo(s) couldn’t be processed.` }); break; } }
-        else guard = 0;
+      // 1. Extract images in the browser (the big file never leaves the device).
+      const images = await extractImagesBySerial(file);
+      if (images.length === 0) {
+        setMsg({ ok: false, text: "No embedded images found in that workbook." });
+        return;
       }
-    } catch { setMsg({ ok: false, text: "Something went wrong during upload." }); }
-    finally { setRunning(false); router.refresh(); }
+
+      // 2. Skip items that already have a photo (resumable).
+      const done = new Set<string>();
+      try {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        if (url && key) {
+          const sb = createClient(url, key, { auth: { persistSession: false } });
+          const rows = await fetchAllItems(sb, { department: dept });
+          for (const r of rows) if (r.photo_path) done.add(`${r.thaily}::${r.sr}`);
+        }
+      } catch { /* if this fails, just upload all */ }
+
+      const todo = images.filter((im) => !done.has(`${im.group}::${im.sr}`));
+      const total = todo.length;
+      if (total === 0) { setMsg({ ok: true, text: "All photos are already imported." }); return; }
+
+      // 3. Upload each image via the normal (small) photo action, with concurrency.
+      let ok = 0, failed = 0, i = 0;
+      setProg({ done: 0, total, failed: 0 });
+      const worker = async () => {
+        while (i < todo.length) {
+          const im = todo[i++];
+          try {
+            const blob = await downscale(im.blob);
+            const fd = new FormData();
+            fd.append("department", dept);
+            fd.append("thaily", im.group);
+            fd.append("sr", String(im.sr));
+            fd.append("photo", new File([blob], "photo.jpg", { type: "image/jpeg" }));
+            const res = await uploadPhoto(fd);
+            if (res.ok) ok++; else failed++;
+          } catch { failed++; }
+          setProg({ done: ok + failed, total, failed });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(4, total) }, worker));
+      setMsg({ ok: true, text: `Done — linked ${ok} photo(s)${failed ? `, ${failed} failed` : ""}.` });
+    } catch {
+      setMsg({ ok: false, text: "Couldn’t read images from that file." });
+    } finally { setRunning(false); router.refresh(); }
   };
 
   const pct = prog && prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
