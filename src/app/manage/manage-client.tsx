@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { unlock, importWorkbook, addItem, type UnlockState, type ImportState } from "./actions";
+import { unlock, importWorkbook, addItem, importPhotos, type UnlockState, type ImportState } from "./actions";
 import { uploadPhoto } from "@/app/actions";
 import { CameraModal } from "@/components/camera";
 import { computePcs, isMeter, sizeProduct } from "@/lib/pcs";
@@ -44,6 +44,7 @@ export function ManageClient({
   return (
     <div className="panels">
       <ImportPanel departments={departments} />
+      <PhotosPanel departments={departments} />
       <AddItemPanel departments={departments} />
       <ExportPanel departments={departments} />
       {gated && (
@@ -158,6 +159,74 @@ function ImportPanel({ departments }: { departments: string[] }) {
         {pending ? "Importing…" : "Import sheet"}
       </button>
       {!dept && <p className="hint-note">Select or name a department to enable the file picker.</p>}
+    </form>
+  );
+}
+
+/* ── Import photos from Excel ─────────────────────── */
+function PhotosPanel({ departments }: { departments: string[] }) {
+  const router = useRouter();
+  const [dept, setDept] = useState<string>(departments[0] ?? "");
+  const [running, setRunning] = useState(false);
+  const [prog, setProg] = useState<{ done: number; total: number; failed: number } | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const run = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const file = fileRef.current?.files?.[0];
+    if (!dept || !file) return;
+    setRunning(true); setMsg(null); setProg(null);
+    let guard = 0;
+    try {
+      while (true) {
+        const fd = new FormData();
+        fd.append("department", dept);
+        fd.append("file", file);
+        const res = await importPhotos(null, fd);
+        if (!res || !res.ok) { setMsg({ ok: false, text: res?.ok === false ? res.error : "Photo import failed." }); break; }
+        setProg({ done: res.total - res.remaining, total: res.total, failed: res.failed });
+        if (res.remaining <= 0) {
+          setMsg({ ok: true, text: `Done — linked ${res.total - res.failed} photo(s)${res.failed ? `, ${res.failed} couldn’t be matched` : ""}.` });
+          break;
+        }
+        if (res.uploaded === 0) { guard++; if (guard >= 2) { setMsg({ ok: false, text: `Stopped — ${res.remaining} photo(s) couldn’t be processed.` }); break; } }
+        else guard = 0;
+      }
+    } catch { setMsg({ ok: false, text: "Something went wrong during upload." }); }
+    finally { setRunning(false); router.refresh(); }
+  };
+
+  const pct = prog && prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
+
+  return (
+    <form onSubmit={run} className="panel">
+      <h2>Import photos from Excel</h2>
+      <p className="sub">Pulls the pictures embedded in the sheet and attaches each to its row by serial number. Import the data first, then run this on the same file.</p>
+      <div className="form-grid">
+        <DepartmentField departments={departments} value={dept} onChange={setDept} id="photo-dept" />
+        <input type="hidden" name="department" value={dept} />
+        <div className="fld full">
+          <label htmlFor="photo-file">Excel file (.xlsx with images)</label>
+          <div className="file-drop">
+            Same workbook you imported
+            <input id="photo-file" type="file" accept=".xlsx" disabled={!dept || running} ref={fileRef} />
+          </div>
+        </div>
+      </div>
+
+      {prog && (
+        <div style={{ marginTop: 12 }}>
+          <div className="progress"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
+          <p className="hint-note" style={{ marginTop: 6 }}>{prog.done} / {prog.total} processed{prog.failed ? ` · ${prog.failed} unmatched` : ""}</p>
+        </div>
+      )}
+      {msg && <div className={`msg ${msg.ok ? "ok" : "err"}`}>{msg.text}</div>}
+
+      <button className="btn primary block" type="submit" disabled={!dept || running}>
+        {running ? "Uploading photos… keep this tab open" : "Import photos"}
+      </button>
+      <p className="hint-note">Large sheets upload in the background over a minute or two — leave the tab open until it says Done.</p>
     </form>
   );
 }

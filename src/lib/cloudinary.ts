@@ -74,6 +74,37 @@ export async function uploadImage(
   return { publicId: json.public_id as string, url: json.secure_url as string };
 }
 
+/** Upload a raw image buffer (signed). Used for images extracted from Excel. */
+export async function uploadImageBuffer(
+  buffer: Buffer,
+  extension: string,
+  folder: string,
+  publicId: string
+): Promise<CloudUpload> {
+  const cloud = cloudName();
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloud || !apiKey || !apiSecret) {
+    throw new Error("Cloudinary is not configured on the server.");
+  }
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = sign({ folder, public_id: publicId, timestamp }, apiSecret);
+
+  const form = new FormData();
+  const type = extension === "png" ? "image/png" : extension === "gif" ? "image/gif" : "image/jpeg";
+  form.append("file", new Blob([new Uint8Array(buffer)], { type }), `img.${extension}`);
+  form.append("api_key", apiKey);
+  form.append("timestamp", String(timestamp));
+  form.append("folder", folder);
+  form.append("public_id", publicId);
+  form.append("signature", signature);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/image/upload`, { method: "POST", body: form });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message || "Cloudinary upload failed.");
+  return { publicId: json.public_id as string, url: json.secure_url as string };
+}
+
 /** Delete one image by public_id (signed). Best-effort. */
 export async function destroyImage(publicId: string): Promise<void> {
   const cloud = cloudName();
