@@ -1,13 +1,12 @@
 import ExcelJS from "exceljs";
 import { readClient, isConfigured } from "@/lib/supabase";
+import { fetchAllItems } from "@/lib/fetch-items";
 import type { RmItem } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const SELECT =
-  "id, department, thaily, sr, size, colour, character, name, inventory, uom, qty_pcs, photo_path, extra";
 const CLOUD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 
 function enc(publicId: string): string {
@@ -48,19 +47,12 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const dept = searchParams.get("department");
 
-  const supabase = readClient();
-  let q = supabase
-    .from("rm_item")
-    .select(SELECT)
-    .order("department", { ascending: true })
-    .order("thaily", { ascending: true })
-    .order("sr", { ascending: true })
-    .limit(10000);
-  if (dept) q = q.eq("department", dept);
-
-  const { data, error } = await q;
-  if (error) return new Response(error.message, { status: 500 });
-  const rows = (data ?? []) as RmItem[];
+  let rows;
+  try {
+    rows = await fetchAllItems(readClient(), { department: dept || undefined });
+  } catch (e) {
+    return new Response(e instanceof Error ? e.message : "read failed", { status: 500 });
+  }
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "RM Stock Portal";
