@@ -83,6 +83,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const [colours, setColours] = useState<Set<string>>(new Set());
   const [invMin, setInvMin] = useState("");
   const [invMax, setInvMax] = useState("");
+  const [extraFilters, setExtraFilters] = useState<Record<string, Set<string>>>({});
   const [filterOpen, setFilterOpen] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<Target | null>(null);
@@ -166,6 +167,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
     setColours(new Set());
     setInvMin("");
     setInvMax("");
+    setExtraFilters({});
   };
 
   // Colour codes present in the active department (for the colour filter).
@@ -178,14 +180,42 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
     return [...s].sort((a, b) => a.localeCompare(b));
   }, [items, activeDept]);
 
+  // Extra fields present in the active department (Gender, Brand, Godown, …),
+  // each with its distinct values — only where the value list is small enough
+  // to pick from.
+  const availExtra = useMemo(() => {
+    const m: Record<string, Set<string>> = {};
+    for (const i of items) {
+      if (i.department !== activeDept) continue;
+      for (const [k, v] of Object.entries(i.extra ?? {})) {
+        if (v == null || v === "" || k === "INV") continue;
+        (m[k] ??= new Set()).add(String(v));
+      }
+    }
+    const out: Record<string, string[]> = {};
+    for (const [k, set] of Object.entries(m)) {
+      if (set.size >= 2 && set.size <= 50) out[k] = [...set].sort((a, b) => a.localeCompare(b));
+    }
+    return out;
+  }, [items, activeDept]);
+
   const toggleColour = (c: string) =>
     setColours((prev) => {
       const n = new Set(prev);
       if (n.has(c)) n.delete(c); else n.add(c);
       return n;
     });
-  const clearFilters = () => { setColours(new Set()); setInvMin(""); setInvMax(""); };
-  const activeFilters = colours.size + (invMin ? 1 : 0) + (invMax ? 1 : 0);
+  const toggleExtra = (key: string, val: string) =>
+    setExtraFilters((prev) => {
+      const set = new Set(prev[key] ?? []);
+      if (set.has(val)) set.delete(val); else set.add(val);
+      const next = { ...prev, [key]: set };
+      if (set.size === 0) delete next[key];
+      return next;
+    });
+  const clearFilters = () => { setColours(new Set()); setInvMin(""); setInvMax(""); setExtraFilters({}); };
+  const extraCount = Object.values(extraFilters).reduce((a, s) => a + s.size, 0);
+  const activeFilters = colours.size + (invMin ? 1 : 0) + (invMax ? 1 : 0) + extraCount;
 
   const stepDept = (dir: 1 | -1) => {
     const i = departments.indexOf(activeDept);
@@ -256,13 +286,18 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
       }
       if (mn != null && (i.inventory == null || i.inventory < mn)) return false;
       if (mx != null && (i.inventory == null || i.inventory > mx)) return false;
+      for (const [k, set] of Object.entries(extraFilters)) {
+        if (set.size === 0) continue;
+        const v = (i.extra ?? {})[k];
+        if (v == null || !set.has(String(v))) return false;
+      }
       if (q) {
         const hay = [i.sr, i.size, i.colour, i.character, i.name].filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [items, activeDept, activeTab, statusFilter, query, colours, invMin, invMax]);
+  }, [items, activeDept, activeTab, statusFilter, query, colours, invMin, invMax, extraFilters]);
   const totalInTab = perThaily[activeTab]?.total ?? 0;
 
   /* Capture */
@@ -442,6 +477,11 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
               Stock {invMin || "0"}–{invMax || "∞"} ✕
             </button>
           )}
+          {Object.entries(extraFilters).flatMap(([k, set]) =>
+            [...set].map((v) => (
+              <button key={`${k}:${v}`} className="afchip" onClick={() => toggleExtra(k, v)}>{v} ✕</button>
+            ))
+          )}
           <button className="afclear" onClick={clearFilters}>Clear all</button>
         </div>
       )}
@@ -550,6 +590,14 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                     </span>
                   </div>
                 )}
+                {lbItem.extra && Object.entries(lbItem.extra).map(([k, v]) =>
+                  v ? (
+                    <div className="full" key={k}>
+                      <span className="dk">{k}</span>
+                      <span className="dv">{v}</span>
+                    </div>
+                  ) : null
+                )}
               </div>
             </div>
             <div className="lb-actions">
@@ -581,18 +629,29 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
               </div>
             </div>
 
-            <div className="sheet-section">
-              <div className="sheet-label">Colour {colours.size > 0 && `· ${colours.size} selected`}</div>
-              {availColours.length === 0 ? (
-                <p className="hint-note" style={{ margin: 0 }}>No colours on these items.</p>
-              ) : (
+            {availColours.length > 0 && (
+              <div className="sheet-section">
+                <div className="sheet-label">Colour {colours.size > 0 && `· ${colours.size} selected`}</div>
                 <div className="fchips">
                   {availColours.map((c) => (
                     <button key={c} className={`fchip${colours.has(c) ? " on" : ""}`} onClick={() => toggleColour(c)}>{c}</button>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {Object.entries(availExtra).map(([key, values]) => (
+              <div className="sheet-section" key={key}>
+                <div className="sheet-label">
+                  {key} {(extraFilters[key]?.size ?? 0) > 0 && `· ${extraFilters[key].size} selected`}
+                </div>
+                <div className="fchips">
+                  {values.map((v) => (
+                    <button key={v} className={`fchip${extraFilters[key]?.has(v) ? " on" : ""}`} onClick={() => toggleExtra(key, v)}>{v}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
 
             <div className="sheet-actions">
               <button className="btn" onClick={clearFilters} disabled={activeFilters === 0}>Clear all</button>
