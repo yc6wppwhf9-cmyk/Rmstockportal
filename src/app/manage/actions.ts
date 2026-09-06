@@ -142,16 +142,20 @@ export async function importPhotos(_prev: PhotoImportState, formData: FormData):
   let supabase;
   try { supabase = writeClient(); } catch { return { ok: false, error: "Server isn’t configured for writes." }; }
 
-  // Which items exist and which already have a photo.
-  const { data: existing, error: exErr } = await supabase
-    .from("rm_item").select("thaily, sr, photo_path").eq("department", department).limit(20000);
-  if (exErr) return { ok: false, error: exErr.message };
+  // Which items exist and which already have a photo (paged past the 1000 cap).
   const hasPhoto = new Set<string>();
   const known = new Set<string>();
-  for (const r of existing ?? []) {
-    const k = `${r.thaily}::${r.sr}`;
-    known.add(k);
-    if (r.photo_path) hasPhoto.add(k);
+  for (let from = 0; ; from += 1000) {
+    const { data: existing, error: exErr } = await supabase
+      .from("rm_item").select("thaily, sr, photo_path").eq("department", department)
+      .order("sr", { ascending: true }).range(from, from + 999);
+    if (exErr) return { ok: false, error: exErr.message };
+    for (const r of existing ?? []) {
+      const k = `${r.thaily}::${r.sr}`;
+      known.add(k);
+      if (r.photo_path) hasPhoto.add(k);
+    }
+    if (!existing || existing.length < 1000) break;
   }
 
   const wb = new ExcelJS.Workbook();

@@ -1,6 +1,7 @@
 import { isConfigured, readClient } from "@/lib/supabase";
 import { photoUrl } from "@/lib/cloudinary";
-import type { RmItem, RmItemView } from "@/lib/types";
+import { fetchAllItems } from "@/lib/fetch-items";
+import type { RmItemView } from "@/lib/types";
 import { Portal } from "@/components/portal";
 
 export const dynamic = "force-dynamic";
@@ -8,24 +9,14 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   if (!isConfigured()) return <SetupNotice />;
 
-  const supabase = readClient();
-  const { data, error } = await supabase
-    .from("rm_item")
-    .select(
-      "id, department, thaily, sr, size, colour, character, name, inventory, uom, qty_pcs, photo_path, photo_updated_at, extra"
-    )
-    .order("department", { ascending: true })
-    .order("thaily", { ascending: true })
-    .order("sr", { ascending: true })
-    .limit(5000);
+  let rows;
+  try {
+    rows = await fetchAllItems(readClient());
+  } catch (e) {
+    return <SetupNotice error={e instanceof Error ? e.message : "read failed"} />;
+  }
 
-  if (error) return <SetupNotice error={error.message} />;
-
-  const items: RmItemView[] = (data ?? []).map((it: RmItem) => ({
-    ...it,
-    photoUrl: photoUrl(it.photo_path),
-  }));
-
+  const items: RmItemView[] = rows.map((it) => ({ ...it, photoUrl: photoUrl(it.photo_path) }));
   return <Portal items={items} />;
 }
 

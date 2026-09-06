@@ -4,14 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { RmItem, RmItemView } from "@/lib/types";
 import { uploadPhoto, removePhoto } from "@/app/actions";
+import { fetchAllItems } from "@/lib/fetch-items";
 import { CameraModal } from "./camera";
 
 const keyOf = (d: string, t: string, s: number) => `${d}::${t}::${s}`;
 const groupLabel = (dept: string, t: string) =>
   dept === "Digital Print" ? `Thaily ${t}` : t;
-
-const SELECT =
-  "id, department, thaily, sr, size, colour, character, name, inventory, uom, qty_pcs, photo_path, photo_updated_at, extra";
 
 /** Client-safe Cloudinary URL (reads only the public cloud name). */
 const CLOUD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -101,14 +99,10 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const refetch = useCallback(async () => {
     const sb = sbRef.current;
     if (!sb) return;
-    const { data } = await sb
-      .from("rm_item")
-      .select(SELECT)
-      .order("department", { ascending: true })
-      .order("thaily", { ascending: true })
-      .order("sr", { ascending: true })
-      .limit(5000);
-    if (data) setItems((data as RmItem[]).map(toView));
+    try {
+      const rows = await fetchAllItems(sb);
+      setItems(rows.map(toView));
+    } catch { /* keep current items on a transient read error */ }
   }, []);
 
   useEffect(() => {
