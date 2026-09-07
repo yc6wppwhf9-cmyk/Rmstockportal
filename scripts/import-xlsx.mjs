@@ -53,6 +53,9 @@ for (const sheetName of wb.SheetNames) {
   for (const r of aoa.slice(1)) {
     const sr = pick(r, idx, "sr no", "sr", "serial");
     if (sr == null || sr === "") continue;
+    const inv = pick(r, idx, "inv", "inv no", "inv no.", "inv code", "lot", "invoice", "invoice no", "inv_no", "inv_code", "inv.");
+    const extra = {};
+    if (inv) extra["INV"] = inv;
     rows.push({
       department,
       thaily,
@@ -63,6 +66,7 @@ for (const sheetName of wb.SheetNames) {
       name: pick(r, idx, "name"),
       inventory: (() => { const v = pick(r, idx, "inventory"); return v == null ? null : Number(v); })(),
       uom: pick(r, idx, "uom"),
+      extra,
     });
   }
 }

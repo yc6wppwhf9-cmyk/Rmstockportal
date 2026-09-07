@@ -167,7 +167,9 @@ main{max-width:1180px;margin:0 auto;padding:16px 18px 80px}
 .shot .retake-hint svg{width:13px;height:13px}
 .body{padding:11px 12px 13px;display:flex;flex-direction:column;gap:9px;flex:1}
 .row-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.size-inv{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;min-width:0}
 .size{font-family:var(--font-mono);font-size:14px;font-weight:600;letter-spacing:-.01em}
+.inv-tag{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--muted);background:var(--surface-2);padding:1px 5px;border-radius:4px;border:1px solid var(--line)}
 .uom-inv{text-align:right;flex:none}
 .uom-inv .qty{font-family:var(--font-mono);font-weight:600;font-size:14px}
 .uom-inv .uom{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
@@ -179,6 +181,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 18px 80px}
   color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 7px}
 .chip.design{background:var(--accent-soft);color:var(--accent);border-color:transparent;font-family:var(--font-body);
   font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:.05em}
+.chip.inv{background:var(--surface-2);color:var(--ink);border-color:var(--line-strong);font-weight:600}
 .empty-grid{grid-column:1/-1;text-align:center;color:var(--muted);padding:60px 20px;font-size:14px}
 
 /* Lightbox */

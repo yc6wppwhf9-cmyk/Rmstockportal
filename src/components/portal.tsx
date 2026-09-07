@@ -20,6 +20,14 @@ function cloudUrl(publicId: string | null | undefined): string | null {
 }
 const toView = (row: RmItem): RmItemView => ({ ...row, photoUrl: cloudUrl(row.photo_path) });
 
+function getInvCode(i: RmItem): string | null {
+  if (!i.extra) return null;
+  for (const [k, v] of Object.entries(i.extra)) {
+    if (/^(inv|invoice|lot)\b/i.test(k) && v) return String(v);
+  }
+  return null;
+}
+
 /* ── Icons ─────────────────────────────────────────── */
 const Cam = ({ w = 24 }: { w?: number }) => (
   <svg width={w} height={w} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -286,8 +294,20 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
         if (v == null || !set.has(String(v))) return false;
       }
       if (q) {
-        const hay = [i.sr, i.size, i.colour, i.character, i.name].filter(Boolean).join(" ").toLowerCase();
-        if (!hay.includes(q)) return false;
+        const invCode = getInvCode(i);
+        const hay = [
+          i.sr,
+          `#${i.sr}`,
+          i.size,
+          i.colour,
+          i.character,
+          i.name,
+          invCode,
+          ...(i.extra ? Object.values(i.extra) : []),
+        ].filter(Boolean).join(" ").toLowerCase();
+        const cleanQ = q.replace(/[\s\-_]+/g, "");
+        const cleanHay = hay.replace(/[\s\-_]+/g, "");
+        if (!hay.includes(q) && !cleanHay.includes(cleanQ)) return false;
       }
       return true;
     });
@@ -445,7 +465,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
       <div className="toolbar">
         <div className="search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-          <input type="search" placeholder="Search size, colour, design or SR no…"
+          <input type="search" placeholder="Search INV, size, colour, design or SR no…"
             value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off" />
         </div>
         <div className="filter-toggle" role="group" aria-label="Filter by photo status">
@@ -493,6 +513,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
               const k = keyOf(i.department, i.thaily, i.sr);
               const busy = busyKey === k;
               const has = Boolean(i.photoUrl);
+              const invCode = getInvCode(i);
               return (
                 <article className="card" key={i.id}>
                   <div className={`shot${busy ? " busy" : ""}`} onClick={() => onShotClick(i)}
@@ -516,7 +537,10 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                   </div>
                   <div className="body">
                     <div className="row-top">
-                      <span className="size">{i.size || "—"}</span>
+                      <div className="size-inv">
+                        <span className="size">{i.size || invCode || "—"}</span>
+                        {i.size && invCode && <span className="inv-tag">{invCode}</span>}
+                      </div>
                       <span className="uom-inv">
                         <span className="qty">{i.inventory ?? "—"}</span>{" "}
                         <span className="uom">{i.uom || ""}</span>
@@ -530,6 +554,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                       {i.character && <span className="chip design">{i.character}</span>}
                       {(i.colour ?? "").split(/[-/]/).map((x) => x.trim()).filter(Boolean)
                         .map((c, idx) => <span className="chip" key={idx}>{c}</span>)}
+                      {!i.size && invCode && <span className="chip inv">INV: {invCode}</span>}
                     </div>
                   </div>
                 </article>

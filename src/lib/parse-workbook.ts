@@ -39,7 +39,7 @@ const MAP: Record<string, string[]> = {
   name: ["item name", "name", "article name"],
   inventory: ["stock (pcs)", "stock", "inventory", "qty", "quantity", "stock qty", "soh", "stock on hand"],
   uom: ["uom", "unit"],
-  inv: ["inv", "inv no", "inv code", "lot"],
+  inv: ["inv", "inv no", "inv no.", "inv code", "lot", "invoice", "invoice no", "inv_no", "inv_code", "inv."],
 };
 
 // Columns we consume into typed fields (so they don't also land in `extra`).
