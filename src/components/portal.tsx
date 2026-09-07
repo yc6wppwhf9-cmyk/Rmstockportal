@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { RmItem, RmItemView } from "@/lib/types";
-import { uploadPhoto, removePhoto } from "@/app/actions";
+import { uploadPhoto, removePhoto, updateInv } from "@/app/actions";
 import { fetchAllItems } from "@/lib/fetch-items";
 import { CameraModal } from "./camera";
 
@@ -93,6 +93,9 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<Target | null>(null);
+  const [editingInv, setEditingInv] = useState(false);
+  const [invInput, setInvInput] = useState("");
+  const [savingInv, setSavingInv] = useState(false);
   const [camTarget, setCamTarget] = useState<Target | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -318,6 +321,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const beginCapture = (t: Target) => setCamTarget(t);
   const onShotClick = (i: RmItemView) => {
     const t = { department: i.department, thaily: i.thaily, sr: i.sr };
+    setEditingInv(false);
     if (i.photoUrl) setLightbox(t);
     else beginCapture(t);
   };
@@ -364,6 +368,44 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
     } else showToast(res.error ?? "Couldn’t remove photo.");
   };
 
+  const handleSaveInv = async () => {
+    if (!lbItem) return;
+    setSavingInv(true);
+    const fd = new FormData();
+    fd.append("department", lbItem.department);
+    fd.append("thaily", lbItem.thaily);
+    fd.append("sr", String(lbItem.sr));
+    fd.append("inv", invInput.trim());
+    try {
+      const res = await updateInv(fd);
+      if (res.ok) {
+        setItems((prev) =>
+          prev.map((i) => {
+            if (i.department === lbItem.department && i.thaily === lbItem.thaily && i.sr === lbItem.sr) {
+              const extra = { ...(i.extra ?? {}) };
+              if (res.inv) extra["INV"] = res.inv;
+              else {
+                delete extra["INV"];
+                delete extra["inv"];
+                delete extra["Inv"];
+              }
+              return { ...i, extra };
+            }
+            return i;
+          })
+        );
+        setEditingInv(false);
+        showToast(`INV updated — #${lbItem.sr}`);
+      } else {
+        showToast(res.error ?? "Couldn’t update INV.");
+      }
+    } catch {
+      showToast("Something went wrong while updating INV.");
+    } finally {
+      setSavingInv(false);
+    }
+  };
+
   const lbItem = lightbox
     ? items.find((i) => i.department === lightbox.department && i.thaily === lightbox.thaily && i.sr === lightbox.sr)
     : null;
@@ -373,7 +415,10 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const stepLightbox = (dir: 1 | -1) => {
     if (lbIndex < 0) return;
     const n = shown[lbIndex + dir];
-    if (n) setLightbox({ department: n.department, thaily: n.thaily, sr: n.sr });
+    if (n) {
+      setEditingInv(false);
+      setLightbox({ department: n.department, thaily: n.thaily, sr: n.sr });
+    }
   };
 
   const C = 2 * Math.PI * 15.5;
@@ -609,8 +654,48 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                     </span>
                   </div>
                 )}
+                <div className="full">
+                  <span className="dk">INV</span>
+                  {editingInv ? (
+                    <div className="inv-edit-row">
+                      <input
+                        className="inv-input"
+                        value={invInput}
+                        onChange={(e) => setInvInput(e.target.value)}
+                        placeholder="e.g. INV22369"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveInv();
+                          else if (e.key === "Escape") setEditingInv(false);
+                        }}
+                      />
+                      <button type="button" className="btn primary sm" onClick={handleSaveInv} disabled={savingInv}>
+                        {savingInv ? "Saving…" : "Save"}
+                      </button>
+                      <button type="button" className="btn sm" onClick={() => setEditingInv(false)} disabled={savingInv}>
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="inv-display-row">
+                      <span className="dv">{getInvCode(lbItem) || "—"}</span>
+                      <button
+                        type="button"
+                        className="btn-edit-inv"
+                        onClick={() => {
+                          setInvInput(getInvCode(lbItem) || "");
+                          setEditingInv(true);
+                        }}
+                        title="Edit INV code"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {lbItem.extra && Object.entries(lbItem.extra).map(([k, v]) =>
-                  v ? (
+                  v && !/^(inv|invoice|lot)\b/i.test(k) ? (
                     <div className="full" key={k}>
                       <span className="dk">{k}</span>
                       <span className="dv">{v}</span>

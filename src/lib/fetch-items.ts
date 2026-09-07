@@ -24,7 +24,7 @@ export async function fetchAllItems(
       .order("thaily", { ascending: true })
       .order("sr", { ascending: true })
       .range(from, from + PAGE - 1);
-    if (opts.department) q = q.eq("department", opts.department);
+    if (opts.department) q = q.ilike("department", opts.department);
     const { data, error } = await q;
     if (error) throw error;
     const rows = (data ?? []) as RmItem[];

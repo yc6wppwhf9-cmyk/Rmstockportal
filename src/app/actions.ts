@@ -122,3 +122,54 @@ export async function removePhoto(formData: FormData): Promise<RemoveResult> {
   revalidatePath("/");
   return { ok: true };
 }
+
+export type UpdateInvResult = { ok: boolean; inv?: string | null; error?: string };
+
+/** Update or set the INV code for one item. */
+export async function updateInv(formData: FormData): Promise<UpdateInvResult> {
+  const department = String(formData.get("department") ?? "").trim();
+  const thaily = String(formData.get("thaily") ?? "").trim();
+  const sr = String(formData.get("sr") ?? "").trim();
+  const inv = String(formData.get("inv") ?? "").trim();
+
+  if (!department || !thaily || !sr) return { ok: false, error: "Missing item details." };
+
+  let supabase;
+  try {
+    supabase = writeClient();
+  } catch {
+    return { ok: false, error: "Server isn't configured for writes." };
+  }
+
+  // Get current extra object
+  const { data: row, error: fetchErr } = await supabase
+    .from("rm_item")
+    .select("extra")
+    .eq("department", department)
+    .eq("thaily", thaily)
+    .eq("sr", Number(sr))
+    .single();
+
+  if (fetchErr) return { ok: false, error: fetchErr.message };
+
+  const extra = (row?.extra as Record<string, string> | null) ?? {};
+  if (inv) {
+    extra["INV"] = inv;
+  } else {
+    delete extra["INV"];
+    delete extra["inv"];
+    delete extra["Inv"];
+  }
+
+  const { error: updErr } = await supabase
+    .from("rm_item")
+    .update({ extra })
+    .eq("department", department)
+    .eq("thaily", thaily)
+    .eq("sr", Number(sr));
+
+  if (updErr) return { ok: false, error: updErr.message };
+
+  revalidatePath("/");
+  return { ok: true, inv: inv || null };
+}

@@ -45,13 +45,18 @@ export async function GET(req: Request) {
   if (!isConfigured()) return new Response("Supabase not configured.", { status: 500 });
 
   const { searchParams } = new URL(req.url);
-  const dept = searchParams.get("department");
+  const dept = searchParams.get("department")?.trim();
 
   let rows;
   try {
     rows = await fetchAllItems(readClient(), { department: dept || undefined });
   } catch (e) {
     return new Response(e instanceof Error ? e.message : "read failed", { status: 500 });
+  }
+
+  // Strictly filter by department when requested
+  if (dept) {
+    rows = rows.filter((r) => r.department.toLowerCase() === dept.toLowerCase());
   }
 
   const wb = new ExcelJS.Workbook();
@@ -89,6 +94,7 @@ export async function GET(req: Request) {
 
     for (const it of items) {
       const extra = (it.extra ?? {}) as Record<string, string>;
+      const invCode = extra["INV"] || extra["inv"] || extra["Inv"] || extra["INV No"] || extra["INV Code"] || "";
       ws.addRow({
         thaily: it.thaily,
         sr: it.sr,
@@ -101,7 +107,7 @@ export async function GET(req: Request) {
         inv: it.inventory ?? "",
         uom: it.uom ?? "",
         pcs: it.qty_pcs ?? "",
-        invcode: extra["INV"] ?? "",
+        invcode: invCode,
         url: it.photo_path ? fullUrl(it.photo_path) : "",
       });
     }
