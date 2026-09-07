@@ -96,6 +96,9 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const [editingInv, setEditingInv] = useState(false);
   const [invInput, setInvInput] = useState("");
   const [savingInv, setSavingInv] = useState(false);
+  const [cardEditingKey, setCardEditingKey] = useState<string | null>(null);
+  const [cardInvValue, setCardInvValue] = useState("");
+  const [cardSaving, setCardSaving] = useState(false);
   const [camTarget, setCamTarget] = useState<Target | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -322,8 +325,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const onShotClick = (i: RmItemView) => {
     const t = { department: i.department, thaily: i.thaily, sr: i.sr };
     setEditingInv(false);
-    if (i.photoUrl) setLightbox(t);
-    else beginCapture(t);
+    setLightbox(t);
   };
 
   const onCaptured = async (raw: Blob) => {
@@ -425,6 +427,43 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
       showToast("Something went wrong while updating INV.");
     } finally {
       setSavingInv(false);
+    }
+  };
+
+  const handleSaveCardInv = async (item: RmItemView) => {
+    setCardSaving(true);
+    const fd = new FormData();
+    fd.append("department", item.department);
+    fd.append("thaily", item.thaily);
+    fd.append("sr", String(item.sr));
+    fd.append("inv", cardInvValue.trim());
+    try {
+      const res = await updateInv(fd);
+      if (res.ok) {
+        setItems((prev) =>
+          prev.map((i) => {
+            if (i.department === item.department && i.thaily === item.thaily && i.sr === item.sr) {
+              const extra = { ...(i.extra ?? {}) };
+              if (res.inv) extra["INV"] = res.inv;
+              else {
+                delete extra["INV"];
+                delete extra["inv"];
+                delete extra["Inv"];
+              }
+              return { ...i, extra };
+            }
+            return i;
+          })
+        );
+        setCardEditingKey(null);
+        showToast(`INV updated — #${item.sr}`);
+      } else {
+        showToast(res.error ?? "Couldn’t update INV.");
+      }
+    } catch {
+      showToast("Something went wrong while updating INV.");
+    } finally {
+      setCardSaving(false);
     }
   };
 
@@ -588,7 +627,17 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                     onKeyDown={(e) => { if (e.key === "Enter") onShotClick(i); }}
                     aria-label={`Serial ${i.sr}${has ? ", view or retake photo" : ", take photo"}`}>
                     <span className="sr-badge">#{i.sr}</span>
-                    <span className={`stat ${has ? "done" : "todo"}`} aria-hidden="true">
+                    <span
+                      className={`stat ${has ? "done" : "todo"}`}
+                      aria-hidden="true"
+                      title={has ? "Photographed" : "Quick camera capture"}
+                      onClick={(e) => {
+                        if (!has) {
+                          e.stopPropagation();
+                          beginCapture({ department: i.department, thaily: i.thaily, sr: i.sr });
+                        }
+                      }}
+                    >
                       {has ? <Check /> : <Cam w={14} />}
                     </span>
                     {has ? (
@@ -598,15 +647,27 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                         <div className="retake-hint"><Cam w={13} /><span>Tap to view / retake</span></div>
                       </>
                     ) : (
-                      <div className="empty-state"><Cam w={30} /><span>TAKE LIVE PHOTO</span></div>
+                      <div className="empty-state"><Cam w={30} /><span>DETAILS / TAKE PHOTO</span></div>
                     )}
                     {busy && <div className="spinner"><div /></div>}
                   </div>
-                  <div className="body">
+                  <div className="body" onClick={() => onShotClick(i)} style={{ cursor: "pointer" }}>
                     <div className="row-top">
                       <div className="size-inv">
                         <span className="size">{i.size || invCode || "—"}</span>
-                        {i.size && invCode && <span className="inv-tag">{invCode}</span>}
+                        {i.size && invCode && (
+                          <span
+                            className="inv-tag editable"
+                            title="Click to edit INV directly"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCardEditingKey(k);
+                              setCardInvValue(invCode);
+                            }}
+                          >
+                            {invCode}
+                          </span>
+                        )}
                       </div>
                       <span className="uom-inv">
                         <span className="qty">{i.inventory ?? "—"}</span>{" "}
@@ -618,10 +679,58 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                     )}
                     {i.name && <div className="name">{i.name}</div>}
                     <div className="chips">
-                      {i.character && <span className="chip design">{i.character}</span>}
-                      {(i.colour ?? "").split(/[-/]/).map((x) => x.trim()).filter(Boolean)
-                        .map((c, idx) => <span className="chip" key={idx}>{c}</span>)}
-                      {!i.size && invCode && <span className="chip inv">INV: {invCode}</span>}
+                      {cardEditingKey === k ? (
+                        <div className="card-inv-edit" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            className="card-inv-input"
+                            value={cardInvValue}
+                            onChange={(e) => setCardInvValue(e.target.value)}
+                            placeholder="INV code…"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveCardInv(i);
+                              else if (e.key === "Escape") setCardEditingKey(null);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn-card-save"
+                            title="Save INV"
+                            disabled={cardSaving}
+                            onClick={() => handleSaveCardInv(i)}
+                          >
+                            {cardSaving ? "…" : "✓"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-card-cancel"
+                            title="Cancel"
+                            disabled={cardSaving}
+                            onClick={() => setCardEditingKey(null)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          {i.character && <span className="chip design">{i.character}</span>}
+                          {(i.colour ?? "").split(/[-/]/).map((x) => x.trim()).filter(Boolean)
+                            .map((c, idx) => <span className="chip" key={idx}>{c}</span>)}
+                          <button
+                            type="button"
+                            className={invCode ? "chip inv editable" : "chip add-inv"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCardEditingKey(k);
+                              setCardInvValue(invCode || "");
+                            }}
+                            title={invCode ? "Click to edit INV directly" : "Click to add INV"}
+                          >
+                            {invCode ? `INV: ${invCode}` : "+ INV"}
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </article>
