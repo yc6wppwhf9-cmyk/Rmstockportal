@@ -173,3 +173,52 @@ export async function updateInv(formData: FormData): Promise<UpdateInvResult> {
   revalidatePath("/");
   return { ok: true, inv: inv || null };
 }
+
+export type DeleteItemResult = { ok: boolean; error?: string };
+
+/** Permanently delete an item (and its photo if one exists). */
+export async function deleteItem(formData: FormData): Promise<DeleteItemResult> {
+  const department = String(formData.get("department") ?? "").trim();
+  const thaily = String(formData.get("thaily") ?? "").trim();
+  const sr = String(formData.get("sr") ?? "").trim();
+
+  if (!department || !thaily || !sr) return { ok: false, error: "Missing item details." };
+
+  let supabase;
+  try {
+    supabase = writeClient();
+  } catch {
+    return { ok: false, error: "Server isn't configured for writes." };
+  }
+
+  // Check if item has a photo to clean up
+  const { data: row } = await supabase
+    .from("rm_item")
+    .select("photo_path")
+    .eq("department", department)
+    .eq("thaily", thaily)
+    .eq("sr", Number(sr))
+    .single();
+
+  const path = row?.photo_path as string | null | undefined;
+
+  const { error } = await supabase
+    .from("rm_item")
+    .delete()
+    .eq("department", department)
+    .eq("thaily", thaily)
+    .eq("sr", Number(sr));
+
+  if (error) return { ok: false, error: error.message };
+
+  if (path) {
+    try {
+      await destroyImage(path);
+    } catch {
+      /* continue even if image destroy fails */
+    }
+  }
+
+  revalidatePath("/");
+  return { ok: true };
+}

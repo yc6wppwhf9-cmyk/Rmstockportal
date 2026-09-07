@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { RmItem, RmItemView } from "@/lib/types";
-import { uploadPhoto, removePhoto, updateInv } from "@/app/actions";
+import { uploadPhoto, removePhoto, updateInv, deleteItem } from "@/app/actions";
 import { fetchAllItems } from "@/lib/fetch-items";
 import { CameraModal } from "./camera";
 
@@ -368,6 +368,28 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
     } else showToast(res.error ?? "Couldn’t remove photo.");
   };
 
+  const doDeleteItem = async () => {
+    if (!lbItem) return;
+    const t = lbItem;
+    if (!window.confirm(`Are you sure you want to permanently delete item #${t.sr} (${t.name || t.department})?`)) {
+      return;
+    }
+    setLightbox(null);
+    const fd = new FormData();
+    fd.append("department", t.department);
+    fd.append("thaily", t.thaily);
+    fd.append("sr", String(t.sr));
+    const res = await deleteItem(fd);
+    if (res.ok) {
+      setItems((prev) =>
+        prev.filter((i) => !(i.department === t.department && i.thaily === t.thaily && i.sr === t.sr))
+      );
+      showToast(`Item #${t.sr} deleted`);
+    } else {
+      showToast(res.error ?? "Couldn’t delete item.");
+    }
+  };
+
   const handleSaveInv = async () => {
     if (!lbItem) return;
     setSavingInv(true);
@@ -709,7 +731,11 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                 <Cam w={15} /> {lbItem.photoUrl ? "Retake" : "Take photo"}
               </button>
               <button className="btn" onClick={() => setLightbox(null)}>Close</button>
-              {lbItem.photoUrl && <button className="btn danger" onClick={doRemove}>Remove</button>}
+              {lbItem.photoUrl && <button className="btn" onClick={doRemove}>Remove photo</button>}
+              <button className="btn danger" onClick={doDeleteItem} title="Delete product completely">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                Delete product
+              </button>
             </div>
           </div>
         </div>
