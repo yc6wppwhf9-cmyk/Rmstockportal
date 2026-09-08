@@ -14,6 +14,9 @@ export type ExtractedImage = {
   extension: string;
 };
 
+const SR_SYNONYMS = ["sr no", "sr", "serial", "serial no", "s.no", "s no", "sno"];
+const GROUP_SYNONYMS = ["thaily", "group"];
+
 /**
  * Extract embedded photos from each worksheet in the Excel workbook,
  * upload them to Cloudinary, and update the rm_item photo_path in Supabase.
@@ -29,12 +32,13 @@ export async function extractAndUploadExcelImages(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await wb.xlsx.load(buf as any);
 
-  const imagesToUpload: ExtractedImage[] = [];
+  const imagesMap = new Map<string, ExtractedImage>();
 
   for (const ws of wb.worksheets) {
     const sheetName = ws.name;
     const m = /(\d+)\s*$/.exec(sheetName);
-    const sheetGroup = m ? m[1] : (sheetName.trim() || "All");
+    // Align exactly with parse-workbook.ts group naming
+    const sheetGroup = m ? m[1] : "All";
 
     const headerRow = ws.getRow(1);
     let srColIdx: number | null = null;
@@ -42,9 +46,9 @@ export async function extractAndUploadExcelImages(
 
     headerRow.eachCell((cell, colNumber) => {
       const h = String(cell.value ?? "").trim().toLowerCase();
-      if (["sr no", "sr", "serial", "serial no", "s.no", "s no", "sno"].includes(h)) {
+      if (SR_SYNONYMS.includes(h)) {
         srColIdx = colNumber;
-      } else if (["thaily", "group"].includes(h)) {
+      } else if (GROUP_SYNONYMS.includes(h)) {
         groupColIdx = colNumber;
       }
     });
@@ -53,11 +57,33 @@ export async function extractAndUploadExcelImages(
 
     const images = ws.getImages();
     for (const img of images) {
-      const rowIdx = Math.floor(img.range.tl.nativeRow ?? img.range.tl.row) + 1;
+      // Calculate vertical center of the image anchor to precisely identify row
+      const tlRow = typeof img.range.tl.row === "number" ? img.range.tl.row : (img.range.tl.nativeRow ?? 0);
+      const brRow = (img.range.br && typeof img.range.br.row === "number")
+        ? img.range.br.row
+        : (img.range.br?.nativeRow ?? tlRow);
+      const midRow = (tlRow + brRow) / 2;
+      let rowIdx = Math.floor(midRow) + 1;
+
       if (rowIdx <= 1) continue;
 
-      const row = ws.getRow(rowIdx);
-      const srVal = row.getCell(srColIdx).value;
+      let row = ws.getRow(rowIdx);
+      let srVal = row.getCell(srColIdx).value;
+
+      // Fallback check if top-left or adjacent row contains the SR number
+      if (srVal == null || srVal === "") {
+        const altIdx = Math.floor(tlRow) + 1;
+        if (altIdx > 1) {
+          const altRow = ws.getRow(altIdx);
+          const altVal = altRow.getCell(srColIdx).value;
+          if (altVal != null && altVal !== "") {
+            rowIdx = altIdx;
+            row = altRow;
+            srVal = altVal;
+          }
+        }
+      }
+
       if (srVal == null || srVal === "") continue;
       const sr = Number(String(srVal).replace(/,/g, "").trim());
       if (!Number.isFinite(sr)) continue;
@@ -74,7 +100,8 @@ export async function extractAndUploadExcelImages(
       const imgData = wb.getImage(Number(img.imageId) || (img.imageId as any));
       if (!imgData || !imgData.buffer) continue;
 
-      imagesToUpload.push({
+      const key = `${department}::${thaily}::${sr}`;
+      imagesMap.set(key, {
         department,
         thaily,
         sr,
@@ -83,6 +110,8 @@ export async function extractAndUploadExcelImages(
       });
     }
   }
+
+  const imagesToUpload = Array.from(imagesMap.values());
 
   if (imagesToUpload.length === 0) return 0;
 
