@@ -150,7 +150,8 @@ function ImportPanel({ departments }: { departments: string[] }) {
       {state && state.ok && (
         <div className="msg ok">
           Imported {state.imported} item(s) into “{state.department}” ({state.groups.length} group
-          {state.groups.length === 1 ? "" : "s"}: {state.groups.join(", ")}).
+          {state.groups.length === 1 ? "" : "s"}: {state.groups.join(", ")})
+          {state.photos ? ` with ${state.photos} photo(s) uploaded.` : "."}
         </div>
       )}
 

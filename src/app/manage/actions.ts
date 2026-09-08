@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { writeClient } from "@/lib/supabase";
 import { MANAGE_COOKIE, managePasscode, manageConfigured, isUnlocked } from "@/lib/manage";
 import { parseWorkbook } from "@/lib/parse-workbook";
+import { extractAndUploadExcelImages } from "@/lib/extract-images";
 import { computePcs } from "@/lib/pcs";
 
 export type UnlockState = { ok: boolean; error?: string };
@@ -21,7 +22,7 @@ export async function unlock(_prev: UnlockState, formData: FormData): Promise<Un
 }
 
 export type ImportState =
-  | { ok: true; imported: number; department: string; groups: string[] }
+  | { ok: true; imported: number; department: string; groups: string[]; photos?: number }
   | { ok: false; error: string }
   | null;
 
@@ -34,9 +35,10 @@ export async function importWorkbook(_prev: ImportState, formData: FormData): Pr
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose an .xlsx file." };
   if (file.size > 25 * 1024 * 1024) return { ok: false, error: "File is larger than 25 MB." };
 
+  const arrayBuffer = await file.arrayBuffer();
   let rows;
   try {
-    rows = parseWorkbook(await file.arrayBuffer(), department);
+    rows = parseWorkbook(arrayBuffer, department);
   } catch {
     return { ok: false, error: "Couldn’t read that file. Is it a valid .xlsx?" };
   }
@@ -55,10 +57,18 @@ export async function importWorkbook(_prev: ImportState, formData: FormData): Pr
     if (error) return { ok: false, error: error.message };
   }
 
+  // Extract and upload embedded photos from Excel
+  let photosCount = 0;
+  try {
+    photosCount = await extractAndUploadExcelImages(arrayBuffer, department, supabase);
+  } catch {
+    /* continue even if image extraction fails */
+  }
+
   const groups = [...new Set(rows.map((r) => r.thaily))];
   revalidatePath("/");
   revalidatePath("/manage");
-  return { ok: true, imported: rows.length, department, groups };
+  return { ok: true, imported: rows.length, department, groups, photos: photosCount };
 }
 
 export type AddState = { ok: boolean; error?: string };
