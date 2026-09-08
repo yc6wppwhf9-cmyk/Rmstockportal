@@ -26,7 +26,8 @@ export async function extractAndUploadExcelImages(
   if (!uploadConfigured()) return 0;
 
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buf as unknown as Buffer);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await wb.xlsx.load(buf as any);
 
   const imagesToUpload: ExtractedImage[] = [];
 
@@ -94,7 +95,7 @@ export async function extractAndUploadExcelImages(
         try {
           const ext = item.extension.toLowerCase();
           const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
-          const file = new File([item.buffer], `photo.${ext}`, { type: mime });
+          const file = new File([new Uint8Array(item.buffer)], `photo.${ext}`, { type: mime });
           const folder = `rm-stock/thaily-${safe(item.thaily)}`;
           const publicId = `${safe(String(item.sr))}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
           const uploaded = await uploadImage(file, folder, publicId);
