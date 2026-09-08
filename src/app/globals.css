@@ -171,6 +171,12 @@ main{max-width:1180px;margin:0 auto;padding:16px 18px 80px}
 .size{font-family:var(--font-mono);font-size:14px;font-weight:600;letter-spacing:-.01em}
 .inv-tag{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--muted);background:var(--surface-2);padding:1px 5px;border-radius:4px;border:1px solid var(--line)}
 .uom-inv{text-align:right;flex:none}
+.uom-inv.editable{cursor:pointer;display:inline-flex;align-items:baseline;gap:3px;border-radius:6px;padding:2px 5px;margin:-2px -5px;transition:background .15s}
+.uom-inv.editable:hover{background:var(--surface-2)}
+.stock-edit-icon{font-size:11px;color:var(--faint);opacity:0;transition:opacity .15s;margin-left:2px}
+.uom-inv.editable:hover .stock-edit-icon{opacity:1;color:var(--accent)}
+.card-stock-edit{display:inline-flex;align-items:center;gap:3px}
+.card-stock-input{font-family:var(--font-mono);font-size:12px;font-weight:600;padding:2px 5px;border:1.5px solid var(--accent);border-radius:5px;background:var(--surface);color:var(--ink);width:75px;outline:none;text-align:right}
 .uom-inv .qty{font-family:var(--font-mono);font-weight:600;font-size:14px}
 .uom-inv .uom{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .name{font-size:12.5px;color:var(--ink);font-weight:500;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}

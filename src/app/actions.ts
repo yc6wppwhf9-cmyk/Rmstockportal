@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { writeClient } from "@/lib/supabase";
 import { uploadImage, destroyImage } from "@/lib/cloudinary";
+import { computePcs } from "@/lib/pcs";
 
 export type UploadResult =
   | { ok: true; photoUrl: string }
@@ -221,4 +222,58 @@ export async function deleteItem(formData: FormData): Promise<DeleteItemResult> 
 
   revalidatePath("/");
   return { ok: true };
+}
+
+export type UpdateStockResult = {
+  ok: boolean;
+  inventory?: number | null;
+  qty_pcs?: number | null;
+  error?: string;
+};
+
+/** Update the stock / inventory quantity for one item. */
+export async function updateStock(formData: FormData): Promise<UpdateStockResult> {
+  const department = String(formData.get("department") ?? "").trim();
+  const thaily = String(formData.get("thaily") ?? "").trim();
+  const sr = String(formData.get("sr") ?? "").trim();
+  const invRaw = String(formData.get("inventory") ?? "").trim();
+
+  if (!department || !thaily || !sr) return { ok: false, error: "Missing item details." };
+
+  let supabase;
+  try {
+    supabase = writeClient();
+  } catch {
+    return { ok: false, error: "Server isn't configured for writes." };
+  }
+
+  // Get current row to know uom & size for pcs calculation
+  const { data: row, error: fetchErr } = await supabase
+    .from("rm_item")
+    .select("uom, size")
+    .eq("department", department)
+    .eq("thaily", thaily)
+    .eq("sr", Number(sr))
+    .single();
+
+  if (fetchErr) return { ok: false, error: fetchErr.message };
+
+  const inventory = invRaw ? Number(invRaw.replace(/,/g, "")) : null;
+  if (invRaw && (inventory == null || !Number.isFinite(inventory) || inventory < 0)) {
+    return { ok: false, error: "Stock quantity must be a valid non-negative number." };
+  }
+
+  const qty_pcs = computePcs(row?.uom, inventory, row?.size);
+
+  const { error: updErr } = await supabase
+    .from("rm_item")
+    .update({ inventory, qty_pcs })
+    .eq("department", department)
+    .eq("thaily", thaily)
+    .eq("sr", Number(sr));
+
+  if (updErr) return { ok: false, error: updErr.message };
+
+  revalidatePath("/");
+  return { ok: true, inventory, qty_pcs };
 }

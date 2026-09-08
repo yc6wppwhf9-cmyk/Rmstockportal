@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { RmItem, RmItemView } from "@/lib/types";
-import { uploadPhoto, removePhoto, updateInv, deleteItem } from "@/app/actions";
+import { uploadPhoto, removePhoto, updateInv, updateStock, deleteItem } from "@/app/actions";
 import { fetchAllItems } from "@/lib/fetch-items";
 import { CameraModal } from "./camera";
 
@@ -96,9 +96,15 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const [editingInv, setEditingInv] = useState(false);
   const [invInput, setInvInput] = useState("");
   const [savingInv, setSavingInv] = useState(false);
+  const [editingStock, setEditingStock] = useState(false);
+  const [stockInput, setStockInput] = useState("");
+  const [savingStock, setSavingStock] = useState(false);
   const [cardEditingKey, setCardEditingKey] = useState<string | null>(null);
   const [cardInvValue, setCardInvValue] = useState("");
   const [cardSaving, setCardSaving] = useState(false);
+  const [cardStockKey, setCardStockKey] = useState<string | null>(null);
+  const [cardStockValue, setCardStockValue] = useState("");
+  const [cardStockSaving, setCardStockSaving] = useState(false);
   const [camTarget, setCamTarget] = useState<Target | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -325,6 +331,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
   const onShotClick = (i: RmItemView) => {
     const t = { department: i.department, thaily: i.thaily, sr: i.sr };
     setEditingInv(false);
+    setEditingStock(false);
     setLightbox(t);
   };
 
@@ -467,6 +474,67 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
     }
   };
 
+  const handleSaveStock = async () => {
+    if (!lbItem) return;
+    setSavingStock(true);
+    const fd = new FormData();
+    fd.append("department", lbItem.department);
+    fd.append("thaily", lbItem.thaily);
+    fd.append("sr", String(lbItem.sr));
+    fd.append("inventory", stockInput.trim());
+    try {
+      const res = await updateStock(fd);
+      if (res.ok) {
+        setItems((prev) =>
+          prev.map((i) => {
+            if (i.department === lbItem.department && i.thaily === lbItem.thaily && i.sr === lbItem.sr) {
+              return { ...i, inventory: res.inventory ?? null, qty_pcs: res.qty_pcs ?? null };
+            }
+            return i;
+          })
+        );
+        setEditingStock(false);
+        showToast(`Stock updated — #${lbItem.sr}`);
+      } else {
+        showToast(res.error ?? "Couldn’t update stock.");
+      }
+    } catch {
+      showToast("Something went wrong while updating stock.");
+    } finally {
+      setSavingStock(false);
+    }
+  };
+
+  const handleSaveCardStock = async (item: RmItemView) => {
+    setCardStockSaving(true);
+    const fd = new FormData();
+    fd.append("department", item.department);
+    fd.append("thaily", item.thaily);
+    fd.append("sr", String(item.sr));
+    fd.append("inventory", cardStockValue.trim());
+    try {
+      const res = await updateStock(fd);
+      if (res.ok) {
+        setItems((prev) =>
+          prev.map((i) => {
+            if (i.department === item.department && i.thaily === item.thaily && i.sr === item.sr) {
+              return { ...i, inventory: res.inventory ?? null, qty_pcs: res.qty_pcs ?? null };
+            }
+            return i;
+          })
+        );
+        setCardStockKey(null);
+        showToast(`Stock updated — #${item.sr}`);
+      } else {
+        showToast(res.error ?? "Couldn’t update stock.");
+      }
+    } catch {
+      showToast("Something went wrong while updating stock.");
+    } finally {
+      setCardStockSaving(false);
+    }
+  };
+
   const lbItem = lightbox
     ? items.find((i) => i.department === lightbox.department && i.thaily === lightbox.thaily && i.sr === lightbox.sr)
     : null;
@@ -478,6 +546,7 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
     const n = shown[lbIndex + dir];
     if (n) {
       setEditingInv(false);
+      setEditingStock(false);
       setLightbox({ department: n.department, thaily: n.thaily, sr: n.sr });
     }
   };
@@ -669,9 +738,56 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
                           </span>
                         )}
                       </div>
-                      <span className="uom-inv">
-                        <span className="qty">{i.inventory ?? "—"}</span>{" "}
-                        <span className="uom">{i.uom || ""}</span>
+                      <span
+                        className="uom-inv editable"
+                        title="Click to edit stock quantity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCardStockKey(k);
+                          setCardStockValue(i.inventory != null ? String(i.inventory) : "");
+                        }}
+                      >
+                        {cardStockKey === k ? (
+                          <div className="card-stock-edit" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              className="card-stock-input"
+                              type="number"
+                              min="0"
+                              value={cardStockValue}
+                              onChange={(e) => setCardStockValue(e.target.value)}
+                              placeholder="Stock"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveCardStock(i);
+                                else if (e.key === "Escape") setCardStockKey(null);
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="btn-card-save"
+                              title="Save Stock"
+                              disabled={cardStockSaving}
+                              onClick={() => handleSaveCardStock(i)}
+                            >
+                              {cardStockSaving ? "…" : "✓"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-card-cancel"
+                              title="Cancel"
+                              disabled={cardStockSaving}
+                              onClick={() => setCardStockKey(null)}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="qty">{i.inventory ?? "—"}</span>{" "}
+                            <span className="uom">{i.uom || ""}</span>
+                            <span className="stock-edit-icon" title="Edit stock">✎</span>
+                          </>
+                        )}
                       </span>
                     </div>
                     {/^\s*m/i.test(i.uom ?? "") && i.qty_pcs != null && (
@@ -769,7 +885,49 @@ export function Portal({ items: initial }: { items: RmItemView[] }) {
               {lbItem.name && <h3>{lbItem.name}</h3>}
               <div className="lb-details">
                 <div><span className="dk">Size</span><span className="dv">{lbItem.size || "—"}</span></div>
-                <div><span className="dk">Inventory</span><span className="dv">{lbItem.inventory ?? "—"} {lbItem.uom || ""}</span></div>
+                <div>
+                  <span className="dk">Inventory / Stock</span>
+                  {editingStock ? (
+                    <div className="inv-edit-row">
+                      <input
+                        className="inv-input"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={stockInput}
+                        onChange={(e) => setStockInput(e.target.value)}
+                        placeholder="e.g. 28000"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveStock();
+                          else if (e.key === "Escape") setEditingStock(false);
+                        }}
+                      />
+                      <button type="button" className="btn primary sm" onClick={handleSaveStock} disabled={savingStock}>
+                        {savingStock ? "Saving…" : "Save"}
+                      </button>
+                      <button type="button" className="btn sm" onClick={() => setEditingStock(false)} disabled={savingStock}>
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="inv-display-row">
+                      <span className="dv">{lbItem.inventory ?? "—"} {lbItem.uom || ""}</span>
+                      <button
+                        type="button"
+                        className="btn-edit-inv"
+                        onClick={() => {
+                          setStockInput(lbItem.inventory != null ? String(lbItem.inventory) : "");
+                          setEditingStock(true);
+                        }}
+                        title="Edit stock quantity"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {/^\s*m/i.test(lbItem.uom ?? "") && lbItem.qty_pcs != null && (
                   <div><span className="dk">Pieces (calc)</span><span className="dv">{lbItem.qty_pcs.toLocaleString()} Pcs</span></div>
                 )}
