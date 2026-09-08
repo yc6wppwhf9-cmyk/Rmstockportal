@@ -131,18 +131,23 @@ function ImportPanel({ departments }: { departments: string[] }) {
 
   return (
     <form ref={formRef} action={action} className="panel">
-      <h2>Import an Excel sheet</h2>
-      <p className="sub">One workbook per department. Columns are detected automatically (SR No, Colour, Item Name, Stock, etc.). Each sheet becomes a group.</p>
+      <h2>Import an Excel sheet (with photos)</h2>
+      <p className="sub">
+        One workbook per department. Columns (SR No, Colour, Item Name, Stock, INV, etc.) and <strong>all embedded photos in the Excel rows are automatically extracted and uploaded</strong>. Each sheet becomes a group.
+      </p>
 
       <div className="form-grid">
         <DepartmentField departments={departments} value={dept} onChange={setDept} id="imp-dept" />
         <input type="hidden" name="department" value={dept} />
         <div className="fld full">
-          <label htmlFor="imp-file">Excel file (.xlsx)</label>
+          <label htmlFor="imp-file">Excel file (.xlsx with or without photos)</label>
           <div className="file-drop">
-            Choose the workbook to import
+            Choose the workbook to import (.xlsx)
             <input id="imp-file" name="file" type="file" accept=".xlsx,.xls" disabled={!dept} />
           </div>
+          <p className="hint-note" style={{ marginTop: 4 }}>
+            💡 Any images embedded inside the Excel rows will be automatically extracted, uploaded to Cloudinary, and linked to each product.
+          </p>
         </div>
       </div>
 
