@@ -124,7 +124,7 @@ export type PhotoImportState =
   | { ok: false; error: string }
   | null;
 
-const SR_HEADERS = ["sr no", "sr", "serial", "serial no", "s.no", "s no", "sno"];
+const SR_HEADERS = ["sr no", "sr", "serial", "serial no", "s.no", "s no", "sno", "l"];
 const TIME_BUDGET_MS = 45000;
 
 function groupForSheet(name: string): string {

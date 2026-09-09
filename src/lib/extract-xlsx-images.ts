@@ -8,7 +8,7 @@ import * as XLSX from "xlsx";
  */
 export type ExtractedImage = { group: string; sr: number; blob: Blob };
 
-const SR_HEADERS = ["sr no", "sr", "serial", "serial no", "s.no", "s no", "sno"];
+const SR_HEADERS = ["sr no", "sr", "serial", "serial no", "s.no", "s no", "sno", "l"];
 const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
 
 function groupForSheet(name: string): string {

@@ -30,7 +30,7 @@ const num = (v: unknown): number | null => {
 
 // Header synonyms → our core fields. First match wins.
 const MAP: Record<string, string[]> = {
-  sr: ["sr no", "sr", "serial", "serial no", "s.no", "s no", "sno"],
+  sr: ["sr no", "sr", "serial", "serial no", "s.no", "s no", "sno", "l"],
   thaily: ["thaily", "group"],
   size: ["size"],
   colourCode: ["colour code", "color code"],
